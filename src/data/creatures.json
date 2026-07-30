@@ -1,0 +1,65 @@
+{
+  "herbivores": [
+    {
+      "id": "triceratops",
+      "name": "Triceratops",
+      "type": "herbivore",
+      "health": 800,
+      "speed": 4.5,
+      "size": 2.8,
+      "aggression": 0.15,
+      "fear": 0.4,
+      "trophyValue": 120,
+      "rarity": "Common",
+      "color": "#5a7a4a",
+      "scale": [2.2, 1.6, 3.5]
+    },
+    {
+      "id": "stegosaurus",
+      "name": "Stegosaurus",
+      "type": "herbivore",
+      "health": 600,
+      "speed": 3.2,
+      "size": 2.4,
+      "aggression": 0.1,
+      "fear": 0.5,
+      "trophyValue": 90,
+      "rarity": "Common",
+      "color": "#6b5a3a",
+      "scale": [1.8, 1.8, 3.0]
+    }
+  ],
+  "predators": [
+    {
+      "id": "raptor",
+      "name": "Utahraptor",
+      "type": "predator",
+      "health": 180,
+      "speed": 9.5,
+      "size": 1.4,
+      "aggression": 0.85,
+      "fear": 0.2,
+      "trophyValue": 200,
+      "rarity": "Rare",
+      "color": "#4a3a2a",
+      "scale": [0.9, 1.1, 2.0],
+      "pack": true,
+      "damage": 25
+    },
+    {
+      "id": "carnotaurus",
+      "name": "Carnotaurus",
+      "type": "predator",
+      "health": 450,
+      "speed": 12,
+      "size": 2.2,
+      "aggression": 0.7,
+      "fear": 0.15,
+      "trophyValue": 350,
+      "rarity": "Epic",
+      "color": "#3a2a1a",
+      "scale": [1.5, 1.8, 3.2],
+      "damage": 40
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "ar15": {
+    "id": "ar15",
+    "name": "AR-15",
+    "damage": 45,
+    "fireRate": 0.12,
+    "magazine": 30,
+    "reloadTime": 2.2,
+    "recoil": 0.8,
+    "spread": 0.02,
+    "range": 180,
+    "automatic": true,
+    "ammoType": "5.56"
+  },
+  "m1911": {
+    "id": "m1911",
+    "name": "1911 .45",
+    "damage": 55,
+    "fireRate": 0.28,
+    "magazine": 7,
+    "reloadTime": 1.6,
+    "recoil": 1.4,
+    "spread": 0.035,
+    "range": 60,
+    "automatic": false,
+    "ammoType": ".45ACP"
+  }
+}
