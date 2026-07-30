@@ -5,14 +5,25 @@ Permanent record of major technical, creative, and production decisions.
 
 ---
 
-### 2026-07-28 — Prototype engine: Three.js + Rapier + Vite
+### 2026-07-30 — Project officially starts; AI-first, non-coder founder
 
 | Field | Content |
 |-------|--------|
-| **Decision** | Build first playable vertical slice in the browser using Three.js, Rapier.js physics, and Vite |
-| **Reason** | Fast iteration, zero cost, immediate playable feedback, data-driven JSON content |
-| **Alternatives** | Godot 4, Unity (free tier), Unreal |
-| **Impact** | Working FPS survival-hunting slice exists in-repo. Creature visuals are procedural low-poly — acceptable for prototype only |
+| **Decision** | DOME production model is fully AI-assisted from ideation to commercialization. Founder does not write code. GitHub push on this date is the first official project act. |
+| **Reason** | Founder directive; no prior codebase outside this conversation’s prototype |
+| **Alternatives** | Hire developers early; learn to code first |
+| **Impact** | All agents must assume non-technical owner: playtest-friendly outputs, no “just open the IDE and…” without steps, log decisions, update ClickUp/docs every session. Commercial target = premium indie / commercial-grade — not classic AAA studio scale unless budget later changes |
+
+---
+
+### 2026-07-30 — Three.js browser slice is founding prototype only
+
+| Field | Content |
+|-------|--------|
+| **Decision** | Existing Three.js + Rapier + Vite code is a **founding conversation prototype**, not a commitment to ship in the browser |
+| **Reason** | Built in-chat to prove a playable loop; project had not “started” before GitHub |
+| **Alternatives** | Treat Three.js as final stack |
+| **Impact** | May be extended or replaced. Commercial engine still OPEN (see below). Do not sink final creature art into Three.js until engine path is settled |
 
 ---
 
@@ -21,9 +32,9 @@ Permanent record of major technical, creative, and production decisions.
 | Field | Content |
 |-------|--------|
 | **Decision** | Creature visual quality is a primary commercial selling point; final builds must far exceed Carnivores: Ice Age fidelity |
-| **Reason** | User directive; immersion and market differentiation |
+| **Reason** | Founder directive |
 | **Alternatives** | Accept stylized low-poly as final aesthetic |
-| **Impact** | Prototype placeholders allowed; art pipeline and possibly engine path must support high-fidelity creatures. Open risk: Three.js browser may not be optimal for final creature fidelity — **engine evaluation for commercial path is a Critical Decision still pending** |
+| **Impact** | Placeholders OK in prototype; final systems must allow high-fidelity creatures |
 
 ---
 
@@ -32,9 +43,9 @@ Permanent record of major technical, creative, and production decisions.
 | Field | Content |
 |-------|--------|
 | **Decision** | No spend until required for launch validation (Steam fee, legal, quality-critical assets) |
-| **Reason** | User constraint; maximize playable quality before capital outlay |
+| **Reason** | Founder constraint |
 | **Alternatives** | Early paid assets / outsourcing |
-| **Impact** | Prefer free tools, procedural, AI-assisted, open licenses |
+| **Impact** | Free tools, procedural, AI-assisted, open licenses first |
 
 ---
 
@@ -43,9 +54,9 @@ Permanent record of major technical, creative, and production decisions.
 | Field | Content |
 |-------|--------|
 | **Decision** | Core fantasy is specialized hunter reclaiming Earth dome-by-dome; helicopter extraction reveal is signature moment |
-| **Reason** | Core Vision Amendment; franchise longevity |
-| **Alternatives** | Pure survival-only / no meta-map |
-| **Impact** | Progression, extraction, and post-Ozark systems must be designed for multi-dome expansion |
+| **Reason** | Core Vision Amendment |
+| **Alternatives** | Pure survival-only |
+| **Impact** | Multi-dome architecture required long-term |
 
 ---
 
@@ -53,10 +64,11 @@ Permanent record of major technical, creative, and production decisions.
 
 | Field | Content |
 |-------|--------|
-| **Decision** | **OPEN** |
-| **Context** | ChatGPT vision docs reference Godot 4.3+ for commercial build; current repo is Three.js prototype |
-| **Must resolve before** | Heavy investment in final creature art pipelines |
-| **Criteria** | Zero-cost, high creature fidelity, modular multi-dome, desktop (Steam) target, AI-agent friendliness |
+| **Decision** | **OPEN — founder should choose soon** |
+| **Recommendation for AI-first + Steam + zero-cost** | **Godot 4.3+** (free, desktop/Steam-friendly, strong for AI agents, no seat license) |
+| **Current code** | Three.js prototype only |
+| **Must resolve before** | Heavy final creature art or months of systems work on the wrong stack |
+| **Criteria** | Zero-cost, creature fidelity headroom, modular multi-dome, Steam, AI-agent friendly, founder can playtest without coding |
 
 ---
 
