@@ -4,6 +4,10 @@
 
 Year 2038. A containment dome seals a failed prehistoric revival experiment in the Ozark wilderness. You are the last authorized entry. Survive, track, hunt, collect trophies, and extract.
 
+> **The player is not the apex predator. The wilderness belongs to the creatures.**
+
+📖 **[North Star — constitutional vision](docs/NORTH_STAR.md)** — read before every development session.
+
 ## Run
 
 ```bash
@@ -34,7 +38,7 @@ Open the URL shown (usually http://localhost:5173). Click **ENTER THE DOME**, th
 | B | Binoculars (info) |
 | Esc | Release mouse |
 
-## Vertical Slice Features
+## Vertical Slice (v0.1) Features
 
 - Procedural forest terrain with height variation, lakes, trees, rocks
 - First-person movement with physics (Rapier)
@@ -55,9 +59,18 @@ Open the URL shown (usually http://localhost:5173). Click **ENTER THE DOME**, th
 - Vite
 - Data-driven creatures & weapons (JSON)
 
-## Notes
+## Development Phases
 
-This is a **playable vertical slice**, not a full AAA title. Models are low-poly procedural. World is ~360 m across for performance. Expand biomes, AI behavior trees, building, and taming in later phases.
+| Phase | Status |
+|-------|--------|
+| 0 — Foundation | ✅ Repository, engine, data systems |
+| 1 — Survival Loop | 🟡 Vertical slice playable |
+| 2 — Living Ecosystem | ⬜ |
+| 3 — Wilderness Expansion | ⬜ |
+| 4 — Persistence | ⬜ |
+| 5 — Commercial Release | ⬜ |
+
+See [docs/NORTH_STAR.md](docs/NORTH_STAR.md) for full vision and rules.
 
 ## License
 
