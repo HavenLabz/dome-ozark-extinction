@@ -1,8 +1,17 @@
+# Godot 4
+game/.godot/
+game/*.translation
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / browser prototype
 node_modules/
 dist/
-.DS_Store
-*.log
-.env
-.env.*
-.vite/
-package-lock.json
+*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp
