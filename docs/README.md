@@ -2,12 +2,11 @@
 
 | Document | Role |
 |----------|------|
-| **[NORTH_STAR.md](./NORTH_STAR.md)** | Constitutional vision — WHY, WHAT, HOW decisions are made |
-| *(forthcoming)* Master Game Design Document | Full systems design |
-| *(forthcoming)* Technical Architecture Document | Implementation architecture |
-| *(forthcoming)* Creature Bible | Species behavior & stats |
-| *(forthcoming)* World Generation Bible | Biomes, terrain, streaming |
-| *(forthcoming)* Development Roadmap | Phase goals & milestones |
-| *(forthcoming)* AI Developer Protocol | Session rules for AI builders |
+| **[NORTH_STAR.md](./NORTH_STAR.md)** | Constitution — WHY, WHAT, HOW, Five Tests, phases |
+| **[CORE_VISION_AMENDMENT.md](./CORE_VISION_AMENDMENT.md)** | **Non-negotiable** visual standard, zero-cost rule, reclamation narrative, multi-dome future |
+| **[PROJECT_OPERATING_SYSTEM.md](./PROJECT_OPERATING_SYSTEM.md)** | Production hierarchy, task format, milestones, QC |
+| **[AI_DEVELOPER_PROTOCOL.md](./AI_DEVELOPER_PROTOCOL.md)** | How AI agents must behave; execution prompt |
+| **[DECISIONS_LOG.md](./DECISIONS_LOG.md)** | Settled & open decisions |
+| **[COMMERCIAL_CHECKLIST.md](./COMMERCIAL_CHECKLIST.md)** | Steam / legal / marketing readiness |
 
-**Rule:** Read `NORTH_STAR.md` before every development session.
+**Before every development session:** read North Star + Core Vision Amendment + Decisions Log.
