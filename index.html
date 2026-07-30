@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DOME: Ozark Extinction</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Segoe UI', system-ui, sans-serif; }
+    #game-canvas { display: block; width: 100%; height: 100%; }
+    #ui-overlay {
+      position: fixed; inset: 0; pointer-events: none; z-index: 10;
+      color: #e8e0d0; text-shadow: 0 1px 3px #000;
+    }
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.7);
+      border-radius: 50%; pointer-events: none;
+    }
+    #crosshair::after {
+      content: ''; position: absolute; top: 50%; left: 50%;
+      width: 4px; height: 4px; background: rgba(255,200,100,0.9);
+      border-radius: 50%; transform: translate(-50%, -50%);
+    }
+    #hud-top {
+      position: absolute; top: 16px; left: 16px; right: 16px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+    }
+    #stats {
+      background: rgba(0,0,0,0.55); padding: 10px 14px; border-radius: 6px;
+      border: 1px solid rgba(180,160,120,0.3); font-size: 13px; line-height: 1.5;
+      min-width: 180px;
+    }
+    #stats .bar {
+      height: 6px; background: #222; border-radius: 3px; margin-top: 3px; overflow: hidden;
+    }
+    #stats .bar > div { height: 100%; border-radius: 3px; transition: width 0.2s; }
+    #weapon-info {
+      background: rgba(0,0,0,0.55); padding: 10px 14px; border-radius: 6px;
+      border: 1px solid rgba(180,160,120,0.3); font-size: 13px; text-align: right;
+    }
+    #message {
+      position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.7); padding: 8px 20px; border-radius: 4px;
+      font-size: 15px; opacity: 0; transition: opacity 0.3s; max-width: 60%;
+      text-align: center; border: 1px solid rgba(200,180,100,0.4);
+    }
+    #message.show { opacity: 1; }
+    #compass {
+      position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); padding: 4px 16px; border-radius: 4px;
+      font-size: 12px; letter-spacing: 2px;
+    }
+    #inventory-hint {
+      position: absolute; bottom: 16px; left: 16px;
+      background: rgba(0,0,0,0.5); padding: 8px 12px; border-radius: 4px;
+      font-size: 12px; color: #aaa;
+    }
+    #start-screen {
+      position: fixed; inset: 0; background: linear-gradient(180deg, #0a1208 0%, #1a2a18 40%, #0d1a10 100%);
+      z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      pointer-events: auto; color: #d4c8a8;
+    }
+    #start-screen h1 {
+      font-size: 42px; letter-spacing: 6px; margin-bottom: 8px;
+      text-shadow: 0 0 30px rgba(180,140,60,0.5); color: #e8d4a0;
+    }
+    #start-screen .subtitle { font-size: 16px; opacity: 0.7; margin-bottom: 40px; letter-spacing: 3px; }
+    #start-screen .desc {
+      max-width: 520px; text-align: center; line-height: 1.6; font-size: 14px;
+      margin-bottom: 32px; opacity: 0.85;
+    }
+    #start-btn {
+      pointer-events: auto; cursor: pointer; background: rgba(140,100,40,0.3);
+      border: 1px solid #c4a060; color: #f0e0b0; padding: 14px 48px; font-size: 16px;
+      letter-spacing: 3px; border-radius: 4px; transition: all 0.2s;
+    }
+    #start-btn:hover { background: rgba(180,130,50,0.5); box-shadow: 0 0 20px rgba(180,130,50,0.3); }
+    #controls-info {
+      margin-top: 28px; font-size: 12px; opacity: 0.6; text-align: center; line-height: 1.8;
+    }
+  </style>
+</head>
+<body>
+  <div id="start-screen">
+    <h1>DOME: OZARK EXTINCTION</h1>
+    <div class="subtitle">PREHISTORIC SURVIVAL HUNTING</div>
+    <div class="desc">
+      Year 2038. A containment dome seals a failed prehistoric revival experiment
+      across 400 acres of Ozark wilderness. You are the last authorized entry.
+      Survive. Document. Hunt legendary creatures. Recover trophies. Call extraction.
+    </div>
+    <button id="start-btn">ENTER THE DOME</button>
+    <div class="controls-info">
+      WASD Move · Shift Sprint · Ctrl Crouch · Space Jump<br>
+      Mouse Look · LMB Fire · RMB Aim · R Reload · 1/2 Switch Weapon<br>
+      F Interact / Build Fire · E Collect Trophy · T Deploy Flare<br>
+      Esc Release Mouse
+    </div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+  <div id="ui-overlay" style="display:none;">
+    <div id="crosshair"></div>
+    <div id="compass">N</div>
+    <div id="hud-top">
+      <div id="stats">
+        <div>HEALTH <span id="hp-val">100</span></div>
+        <div class="bar"><div id="hp-bar" style="width:100%;background:#4a8;"></div></div>
+        <div style="margin-top:6px;">HUNGER <span id="hunger-val">100</span></div>
+        <div class="bar"><div id="hunger-bar" style="width:100%;background:#ca4;"></div></div>
+        <div style="margin-top:6px;">HYDRATION <span id="thirst-val">100</span></div>
+        <div class="bar"><div id="thirst-bar" style="width:100%;background:#48a;"></div></div>
+        <div style="margin-top:6px;">TEMP <span id="temp-val">22°C</span></div>
+      </div>
+      <div id="weapon-info">
+        <div id="weapon-name">AR-15</div>
+        <div id="ammo-count">30 / ∞</div>
+        <div id="time-display" style="margin-top:6px;opacity:0.8;">06:00</div>
+      </div>
+    </div>
+    <div id="message"></div>
+    <div id="inventory-hint">
+      Track footprints · Observe with binoculars (B) · Hunt carefully<br>
+      You are not the apex predator.
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
