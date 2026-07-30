@@ -1,6 +1,8 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=8 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1_player"]
+[ext_resource type="PackedScene" path="res://scenes/ui/hud.tscn" id="2_hud"]
+[ext_resource type="Script" path="res://scripts/systems/survival_system.gd" id="3_survival"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.35, 0.5, 0.7, 1)
@@ -67,3 +69,8 @@ size = Vector3(4, 3, 5)
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 2, -10)
 radius = 0.6
 height = 4.0
+
+[node name="SurvivalSystem" type="Node" parent="."]
+script = ExtResource("3_survival")
+
+[node name="HUD" parent="." instance=ExtResource("2_hud")]
