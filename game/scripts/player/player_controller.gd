@@ -60,11 +60,23 @@ var _recoil_pitch: float = 0.0   # accumulated, recovered each frame
 var _recoil_yaw: float = 0.0
 
 
+var _flashlight: SpotLight3D
+
+
 func _ready() -> void:
 	add_to_group("player")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	camera.fov = default_fov
 	_build_weapons()
+	# Flashlight gear (toggle L) — points where you look; off by default.
+	_flashlight = SpotLight3D.new()
+	_flashlight.light_color = Color(1.0, 0.97, 0.9)
+	_flashlight.light_energy = 6.0
+	_flashlight.spot_range = 40.0
+	_flashlight.spot_angle = 32.0
+	_flashlight.spot_attenuation = 0.6
+	_flashlight.visible = false
+	camera.add_child(_flashlight)
 
 
 func _build_weapons() -> void:
@@ -112,6 +124,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		var w := _current_weapon()
 		if w:
 			w.cycle_optic()
+	elif event.is_action_pressed("flashlight"):
+		_flashlight.visible = not _flashlight.visible
 	elif event.is_action_pressed("extract"):
 		var ex := get_tree().get_first_node_in_group("extraction")
 		if ex:
