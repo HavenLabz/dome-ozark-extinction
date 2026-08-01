@@ -5,10 +5,13 @@ extends CharacterBody3D
 @export var walk_speed: float = 4.5
 @export var sprint_speed: float = 7.5
 @export var crouch_speed: float = 2.0
+@export var prone_speed: float = 1.2
 @export var jump_velocity: float = 4.5
 @export var mouse_sensitivity: float = 0.0025
 @export var stamina_drain_sprint: float = 12.0
 @export var stamina_regen: float = 18.0
+
+enum Stance { STAND, CROUCH, PRONE }
 
 @export_group("Interaction")
 ## Reach of the "look at it and press E" interaction ray.
@@ -26,6 +29,8 @@ signal weapon_changed(weapon: Weapon)
 ## Emitted with a creature's field-guide text while scanning through binoculars
 ## (empty string clears it).
 signal scan_info_changed(text: String)
+## Emitted when a shot connects, so the HUD can flash a hitmarker.
+signal hitmarker(on_creature: bool)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
@@ -36,15 +41,17 @@ const _MASK_CREATURES := 4
 const WEAPON_SCENE := preload("res://scripts/weapons/weapon.gd")
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
-var _is_crouching: bool = false
+var _stance: int = Stance.STAND
 var _is_sprinting: bool = false
-var _standing_height: float = 1.8
-var _crouch_height: float = 1.0
 var _current_prompt: String = ""
+# Capsule heights and eye heights per stance.
+const _CAP_H := {Stance.STAND: 1.8, Stance.CROUCH: 1.1, Stance.PRONE: 0.5}
+const _EYE_Y := {Stance.STAND: 1.6, Stance.CROUCH: 0.95, Stance.PRONE: 0.4}
 
 var _weapons: Array[Weapon] = []
 var _weapon_idx: int = -1
 var _ads: bool = false
+var _holding_breath: bool = false
 var _scanning: bool = false
 var _recoil_pitch: float = 0.0   # accumulated, recovered each frame
 var _recoil_yaw: float = 0.0
@@ -68,6 +75,7 @@ func _build_weapons() -> void:
 		w.data = wd
 		w.visible = false
 		camera.add_child(w)
+		w.shot_hit.connect(func(on_creature): hitmarker.emit(on_creature))
 		_weapons.append(w)
 	if not _weapons.is_empty():
 		_switch_weapon(0)
@@ -105,7 +113,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _physics_process(delta: float) -> void:
 	_apply_gravity(delta)
-	_handle_crouch()
+	_handle_stance(delta)
 	_handle_movement(delta)
 	_regen_stamina(delta)
 	move_and_slide()
@@ -116,29 +124,44 @@ func _physics_process(delta: float) -> void:
 func _apply_gravity(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= _gravity * delta
-	elif Input.is_action_just_pressed("jump") and not _is_crouching:
+	elif Input.is_action_just_pressed("jump") and _stance == Stance.STAND:
 		velocity.y = jump_velocity
 
 
-func _handle_crouch() -> void:
-	var want_crouch := Input.is_action_pressed("crouch")
-	if want_crouch != _is_crouching:
-		_is_crouching = want_crouch
-		var shape := collision_shape.shape as CapsuleShape3D
-		if shape:
-			shape.height = _crouch_height if _is_crouching else _standing_height
-			collision_shape.position.y = shape.height * 0.5
+func _handle_stance(delta: float) -> void:
+	# Prone toggles (Z); crouch is hold (Ctrl); prone wins over crouch.
+	if Input.is_action_just_pressed("prone"):
+		_stance = Stance.STAND if _stance == Stance.PRONE else Stance.PRONE
+	elif _stance != Stance.PRONE:
+		_stance = Stance.CROUCH if Input.is_action_pressed("crouch") else Stance.STAND
+	elif Input.is_action_just_pressed("jump"):
+		_stance = Stance.STAND   # jump key stands you up from prone
+
+	# Resize capsule + smoothly lower the eye height.
+	var shape := collision_shape.shape as CapsuleShape3D
+	if shape:
+		var h: float = _CAP_H[_stance]
+		shape.height = h
+		collision_shape.position.y = h * 0.5
+	head.position.y = lerpf(head.position.y, _EYE_Y[_stance], clampf(delta * 12.0, 0.0, 1.0))
+
+
+func _stance_speed() -> float:
+	match _stance:
+		Stance.CROUCH: return crouch_speed
+		Stance.PRONE: return prone_speed
+		_: return walk_speed
 
 
 func _handle_movement(delta: float) -> void:
 	var input_dir := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
 	var direction := (head.transform.basis * Vector3(input_dir.x, 0.0, input_dir.y)).normalized()
 
-	var speed := walk_speed
+	var speed := _stance_speed()
 	_is_sprinting = false
-	if _is_crouching:
-		speed = crouch_speed
-	elif Input.is_action_pressed("sprint") and GameState.stamina > 0.0 and direction != Vector3.ZERO:
+	# Sprint only while standing.
+	if _stance == Stance.STAND and Input.is_action_pressed("sprint") and not _ads \
+			and GameState.stamina > 0.0 and direction != Vector3.ZERO:
 		speed = sprint_speed
 		_is_sprinting = true
 		GameState.stamina -= stamina_drain_sprint * delta
@@ -152,7 +175,7 @@ func _handle_movement(delta: float) -> void:
 
 
 func _regen_stamina(delta: float) -> void:
-	if not Input.is_action_pressed("sprint") or _is_crouching:
+	if not _is_sprinting:
 		GameState.stamina += stamina_regen * delta
 
 
@@ -160,9 +183,10 @@ func _regen_stamina(delta: float) -> void:
 # Creature-facing API
 # ---------------------------------------------------------------------------
 
-## True when the player is moving noisily (sprinting). Creatures' hearing uses this.
+## True when the player is moving noisily. Sprinting is loud; prone is silent.
+## Creatures' hearing uses this (COD-style stealth via stance).
 func is_making_noise() -> bool:
-	return _is_sprinting
+	return _is_sprinting and _stance == Stance.STAND
 
 
 ## Damage entry point — creatures call this when they land a hit.
@@ -212,12 +236,17 @@ func _handle_weapons(delta: float) -> void:
 		_scanning = false
 		scan_info_changed.emit("")
 
-	# Aim-down-sights.
+	# Aim-down-sights + hold-breath (steady, Shift while aiming).
 	_ads = Input.is_action_pressed("aim") and captured
-	camera.fov = lerpf(camera.fov, ads_fov if _ads else default_fov, clampf(delta * 12.0, 0.0, 1.0))
+	_holding_breath = _ads and Input.is_action_pressed("sprint")
+	var target_fov := default_fov
+	if _ads:
+		target_fov = ads_fov * (0.82 if _holding_breath else 1.0)
+	camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 12.0, 0.0, 1.0))
 
 	if w != null:
 		w.set_ads(_ads)   # raise/lower the sights on the viewmodel
+		w.set_steady(_holding_breath)
 	if w != null and captured:
 		var wants_fire := false
 		if w.data.fire_mode == WeaponData.FireMode.AUTO:
@@ -242,6 +271,8 @@ func _scan_through_binoculars() -> void:
 
 func _add_recoil(wd: WeaponData) -> void:
 	var f := wd.ads_factor if _ads else 1.0
+	if _holding_breath:
+		f *= 0.6   # steady aim tames the kick
 	var kp := wd.recoil_pitch * f
 	var ky := wd.recoil_yaw * f * (1.0 if randf() > 0.5 else -1.0)
 	camera.rotation.x = clampf(camera.rotation.x + kp, deg_to_rad(-89.0), deg_to_rad(89.0))

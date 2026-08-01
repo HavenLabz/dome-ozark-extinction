@@ -8,6 +8,8 @@ class_name Weapon
 signal ammo_changed(in_mag: int, reserve: int)
 signal reload_started(seconds: float)
 signal fired()
+## Emitted the instant a shot connects; on_creature true if it hit an animal.
+signal shot_hit(on_creature: bool)
 
 @export var data: WeaponData
 
@@ -28,6 +30,7 @@ var _flash_t: float = 0.0
 var _rest_pos: Vector3          # hip-fire viewmodel position (lower-right)
 var _ads_pos: Vector3           # aim-down-sights position (centered)
 var _ads_active: bool = false
+var _steady: bool = false       # hold-breath
 var _aim_blend: float = 0.0     # 0 = hip, 1 = ADS
 var _kick_pos: Vector3 = Vector3.ZERO
 var _kick_rot: float = 0.0
@@ -87,10 +90,42 @@ func try_fire(ads: bool) -> bool:
 	_apply_viewmodel_kick(ads)
 	_set_flash(true)
 	_flash_t = 0.05
+	_eject_casing()
 	var bloom := data.spread_per_shot * (data.ads_factor if ads else 1.0)
 	_spread = minf(data.spread_max, _spread + bloom)
 	fired.emit()
 	return true
+
+
+## A brass casing arcs out to the right and vanishes — pure feel.
+func _eject_casing() -> void:
+	var host := get_tree().current_scene
+	var cam := get_viewport().get_camera_3d()
+	if host == null or cam == null:
+		return
+	var c := MeshInstance3D.new()
+	var cm := CylinderMesh.new()
+	cm.top_radius = 0.012
+	cm.bottom_radius = 0.012
+	cm.height = 0.05
+	c.mesh = cm
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.85, 0.62, 0.22)
+	m.metallic = 0.8
+	m.roughness = 0.3
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	c.material_override = m
+	host.add_child(c)
+	var origin := global_position + cam.global_transform.basis.x * 0.15
+	c.global_position = origin
+	c.rotation = Vector3(_rng.randf(), _rng.randf(), _rng.randf()) * TAU
+	var right := cam.global_transform.basis.x
+	var apex := origin + right * 0.5 + Vector3.UP * 0.25
+	var tw := c.create_tween()
+	tw.tween_property(c, "global_position", apex, 0.14).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(c, "global_position", apex + right * 0.3 - Vector3.UP * 1.0, 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.45)
+	tw.tween_callback(c.queue_free)
 
 
 func reload() -> void:
@@ -106,8 +141,14 @@ func set_ads(on: bool) -> void:
 	_ads_active = on
 
 
+## Hold-breath steadies the weapon (tighter spread). Player sets this while ADS.
+func set_steady(on: bool) -> void:
+	_steady = on
+
+
 func current_spread(ads: bool) -> float:
-	return _spread * (data.ads_factor if ads else 1.0)
+	var s := _spread * (data.ads_factor if ads else 1.0)
+	return s * 0.35 if _steady else s
 
 
 func get_ammo() -> Vector2i:
@@ -147,8 +188,38 @@ func _do_hitscan(ads: bool) -> void:
 		if hit.is_empty():
 			continue
 		var collider: Object = hit.get("collider")
-		if collider != null and collider.has_method("take_damage"):
+		var on_creature := collider != null and collider.has_method("take_damage")
+		if on_creature:
 			collider.take_damage(data.damage, from)
+		_spawn_impact(hit.get("position"), hit.get("normal"), on_creature)
+		shot_hit.emit(on_creature)
+
+
+## Brief spark/puff where a shot lands. Blood-tone on flesh, dust on terrain.
+func _spawn_impact(pos: Vector3, normal: Vector3, on_creature: bool) -> void:
+	var host := get_tree().current_scene
+	if host == null:
+		return
+	var mi := MeshInstance3D.new()
+	var s := SphereMesh.new()
+	s.radius = 0.12
+	s.height = 0.24
+	s.radial_segments = 6
+	s.rings = 3
+	mi.mesh = s
+	var m := StandardMaterial3D.new()
+	m.albedo_color = Color(0.6, 0.06, 0.05) if on_creature else Color(0.55, 0.5, 0.42)
+	m.emission_enabled = true
+	m.emission = m.albedo_color
+	m.emission_energy_multiplier = 2.0
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mi.material_override = m
+	host.add_child(mi)
+	mi.global_position = pos + normal * 0.05
+	var tw := mi.create_tween()
+	tw.tween_property(mi, "scale", Vector3(2.2, 2.2, 2.2), 0.18)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.18)
+	tw.tween_callback(mi.queue_free)
 
 
 func _apply_viewmodel_kick(ads: bool) -> void:

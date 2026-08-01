@@ -10,6 +10,8 @@ var _score: Label
 var _ammo: Label
 var _scan: Label
 var _extract: Label
+var _hitmark: Label
+var _hit_t: float = 0.0
 var _bound_weapon: Weapon
 
 
@@ -44,6 +46,8 @@ func _hook_player() -> void:
 		player.weapon_changed.connect(_on_weapon_changed)
 	if player.has_signal("scan_info_changed"):
 		player.scan_info_changed.connect(_on_scan_changed)
+	if player.has_signal("hitmarker"):
+		player.hitmarker.connect(_on_hitmarker)
 	# The initial weapon_changed fired during the player's _ready (before this
 	# deferred hookup), so bind the already-active weapon now.
 	if player.has_method("get_active_weapon"):
@@ -77,6 +81,21 @@ func _on_extract_status(text: String) -> void:
 	_extract.visible = text != ""
 
 
+func _on_hitmarker(on_creature: bool) -> void:
+	_hitmark.add_theme_color_override("font_color",
+		Color(1, 0.3, 0.2) if on_creature else Color(0.95, 0.95, 0.9))
+	_hitmark.visible = true
+	_hit_t = 0.22
+
+
+func _process(delta: float) -> void:
+	if _hit_t > 0.0:
+		_hit_t -= delta
+		_hitmark.modulate.a = clampf(_hit_t / 0.22, 0.0, 1.0)
+		if _hit_t <= 0.0:
+			_hitmark.visible = false
+
+
 func _on_prompt_changed(text: String) -> void:
 	_prompt.text = text
 	_prompt.visible = text != ""
@@ -102,6 +121,16 @@ func _build() -> void:
 	cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_add_control(cross)
+
+	# Hitmarker — flashes over the crosshair when a shot connects.
+	_hitmark = Label.new()
+	_hitmark.text = "✕"
+	_hitmark.add_theme_font_size_override("font_size", 30)
+	_hitmark.set_anchors_preset(Control.PRESET_CENTER)
+	_hitmark.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_hitmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_hitmark.visible = false
+	_add_control(_hitmark)
 
 	_stats = _make_label(Vector2(16, 16))
 	_add_control(_stats)
