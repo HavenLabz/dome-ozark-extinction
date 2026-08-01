@@ -1,0 +1,84 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/campfire.gd" id="1"]
+
+[sub_resource type="SphereShape3D" id="Sph_interact"]
+radius = 1.3
+
+[sub_resource type="SphereShape3D" id="Sph_haven"]
+radius = 5.0
+
+[sub_resource type="CylinderMesh" id="Log"]
+top_radius = 0.12
+bottom_radius = 0.12
+height = 1.0
+
+[sub_resource type="StandardMaterial3D" id="LogMat"]
+albedo_color = Color(0.26, 0.18, 0.11, 1)
+roughness = 1.0
+
+[sub_resource type="CylinderMesh" id="Flame"]
+top_radius = 0.0
+bottom_radius = 0.28
+height = 0.8
+
+[sub_resource type="StandardMaterial3D" id="FlameMat"]
+albedo_color = Color(1, 0.55, 0.15, 1)
+emission_enabled = true
+emission = Color(1, 0.5, 0.12, 1)
+emission_energy_multiplier = 5.0
+
+[node name="Campfire" type="Area3D"]
+collision_layer = 16
+collision_mask = 0
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
+shape = SubResource("Sph_interact")
+
+[node name="Log1" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.94, 0.34, 0, -0.34, 0.94, 0, 0, 0, 1, 0, 0.15, 0)
+mesh = SubResource("Log")
+material_override = SubResource("LogMat")
+
+[node name="Log2" type="MeshInstance3D" parent="."]
+transform = Transform3D(0, 1, 0, -1, 0, 0, 0, 0, 1, 0, 0.15, 0)
+mesh = SubResource("Log")
+material_override = SubResource("LogMat")
+
+[node name="Log3" type="MeshInstance3D" parent="."]
+transform = Transform3D(0.94, -0.34, 0, 0.34, 0.94, 0, 0, 0, 1, 0, 0.15, 0)
+mesh = SubResource("Log")
+material_override = SubResource("LogMat")
+
+[node name="Fire" type="Node3D" parent="."]
+
+[node name="Flame1" type="MeshInstance3D" parent="Fire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.55, 0)
+mesh = SubResource("Flame")
+material_override = SubResource("FlameMat")
+
+[node name="Flame2" type="MeshInstance3D" parent="Fire"]
+transform = Transform3D(0.7, 0, 0, 0, 0.7, 0, 0, 0, 0.7, 0.18, 0.45, 0.12)
+mesh = SubResource("Flame")
+material_override = SubResource("FlameMat")
+
+[node name="Flame3" type="MeshInstance3D" parent="Fire"]
+transform = Transform3D(0.6, 0, 0, 0, 0.6, 0, 0, 0, 0.6, -0.15, 0.42, -0.1)
+mesh = SubResource("Flame")
+material_override = SubResource("FlameMat")
+
+[node name="Light" type="OmniLight3D" parent="Fire"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+light_color = Color(1, 0.66, 0.32, 1)
+light_energy = 2.8
+omni_range = 12.0
+
+[node name="HavenArea" type="Area3D" parent="."]
+collision_layer = 0
+collision_mask = 2
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="HavenArea"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
+shape = SubResource("Sph_haven")

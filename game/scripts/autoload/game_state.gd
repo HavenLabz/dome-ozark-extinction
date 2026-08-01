@@ -35,6 +35,34 @@ var trophies_collected: Array[StringName] = []
 var trophy_score: int = 0
 var is_extraction_available: bool = false
 
+# --- Survival ---
+const HUNGER_DRAIN := 0.30       # per second
+const HYDRATION_DRAIN := 0.45
+const STARVE_DAMAGE := 2.5       # per second at 0 food/water
+const HAVEN_HEAL := 4.0          # per second near a lit fire
+var survival_active: bool = true
+## Set true by a lit campfire when the player is near: pauses drain and heals.
+var near_fire: bool = false
+
+
+func _process(delta: float) -> void:
+	if not survival_active or health <= 0.0:
+		return
+	if near_fire:
+		health = minf(100.0, health + HAVEN_HEAL * delta)
+		hunger = minf(100.0, hunger + 1.0 * delta)
+		hydration = minf(100.0, hydration + 1.0 * delta)
+		return
+	hunger -= HUNGER_DRAIN * delta
+	hydration -= HYDRATION_DRAIN * delta
+	if hunger <= 0.0 or hydration <= 0.0:
+		apply_damage(STARVE_DAMAGE * delta)
+
+
+## Eat harvested meat — restores hunger (amount scales with the kill).
+func eat_food(amount: float) -> void:
+	hunger = minf(100.0, hunger + amount)
+
 
 func apply_damage(amount: float) -> void:
 	if health <= 0.0:

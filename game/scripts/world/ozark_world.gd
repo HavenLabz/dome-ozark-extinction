@@ -48,6 +48,7 @@ func _ready() -> void:
 	_build_water()
 	_build_structure(Vector2(-30.0, -25.0))
 	_build_resource_cache(Vector2(-24.0, -20.0))
+	_build_campfires()
 	_add_birds()
 
 	# Let the freshly-created static colliders register with the physics server
@@ -75,6 +76,32 @@ func _capture_screenshot() -> void:
 	var idx := args.find("--shot")
 	var path := args[idx + 1] if idx + 1 < args.size() else "user://dome_shot.png"
 	# Elevated vantage looking across terrain, water, and forest.
+	# Night shot: force night, light a campfire, frame it.
+	if "--shotnight" in args:
+		var dn := get_node_or_null("DayNight") as DayNightCycle
+		if dn:
+			dn.time_of_day = 0.92
+			dn._apply()
+		var fire: Node3D = null
+		for c in get_children():
+			if c is Campfire:
+				(c as Campfire).interact()  # light it
+				fire = c
+				break
+		var ncam := Camera3D.new()
+		add_child(ncam)
+		ncam.fov = 70.0
+		if fire:
+			ncam.global_position = fire.global_position + Vector3(4, 2.2, 4)
+			ncam.look_at(fire.global_position + Vector3.UP * 0.6, Vector3.UP)
+		ncam.current = true
+		await get_tree().create_timer(2.5).timeout
+		var img_n := get_viewport().get_texture().get_image()
+		img_n.save_png(path)
+		print("[shot] saved %s (%dx%d)" % [path, img_n.get_width(), img_n.get_height()])
+		get_tree().quit()
+		return
+
 	# Weapon shot: use the player's own camera (which holds the viewmodel).
 	if "--shotweapon" in args:
 		await get_tree().create_timer(2.5).timeout
@@ -325,6 +352,14 @@ func _build_structure(at: Vector2) -> void:
 	add_child(shack)
 
 
+func _build_campfires() -> void:
+	const CAMPFIRE_SCENE := preload("res://scenes/world/campfire.tscn")
+	for at in [player_start + Vector2(3.0, -2.0), Vector2(-27.0, -21.0)]:
+		var fire := CAMPFIRE_SCENE.instantiate()
+		add_child(fire)
+		fire.global_position = terrain.surface_point(at.x, at.y)
+
+
 func _build_resource_cache(at: Vector2) -> void:
 	var ground := terrain.surface_point(at.x, at.y)
 	var crate := StaticBody3D.new()
@@ -529,6 +564,25 @@ func _smoke_report() -> void:
 			results.append(["Weapon fires + consumes ammo (%d→%d)" % [a0.x, a1.x], a1.x == a0.x - 1])
 		else:
 			results.append(["Weapon equipped", false])
+
+	# --- Survival drain (heal first: predators may have killed the player above) ---
+	GameState.survival_active = true
+	GameState.near_fire = false
+	GameState.health = 100.0
+	GameState.hunger = 90.0
+	var hunger0 := GameState.hunger
+	await get_tree().create_timer(1.0).timeout
+	results.append(["Survival drains hunger (%.1f→%.1f)" % [hunger0, GameState.hunger],
+		GameState.hunger < hunger0])
+
+	# --- Day/night advances ---
+	var dn := get_node_or_null("DayNight") as DayNightCycle
+	if dn:
+		var t0 := dn.time_of_day
+		await get_tree().create_timer(0.5).timeout
+		results.append(["Day/night cycle advances", dn.time_of_day != t0])
+	else:
+		results.append(["Day/night node present", false])
 
 	# --- Report ---
 	print("\n===== OZARK BEHAVIORAL SMOKE TEST =====")

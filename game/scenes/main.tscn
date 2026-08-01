@@ -1,10 +1,11 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/ozark_world.gd" id="1_world"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
 [ext_resource type="Resource" path="res://data/creatures/ozark_grazer.tres" id="3_grazer"]
 [ext_resource type="Resource" path="res://data/creatures/ridge_raptor.tres" id="4_raptor"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="5_hud"]
+[ext_resource type="Script" path="res://scripts/world/day_night.gd" id="6_daynight"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.28, 0.45, 0.72, 1)
@@ -74,3 +75,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 20, 20)
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("5_hud")
+
+[node name="DayNight" type="Node" parent="."]
+script = ExtResource("6_daynight")

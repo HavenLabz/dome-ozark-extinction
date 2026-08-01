@@ -9,6 +9,7 @@ class_name TrophyPickup
 var _trophy_id: StringName = &"unknown_trophy"
 var _display_name: String = "Unknown Trophy"
 var _value: int = 0
+var _food: float = 30.0
 var _collected: bool = false
 
 
@@ -16,6 +17,7 @@ func setup_from_creature(data: CreatureData) -> void:
 	_trophy_id = data.trophy_id
 	_display_name = "%s Trophy" % data.display_name
 	_value = data.trophy_value
+	_food = clampf(20.0 + data.max_health * 0.08, 20.0, 70.0)  # meat scales with size
 	# Tint the marker to match the species so drops read at a glance.
 	if mesh:
 		var mat := StandardMaterial3D.new()
@@ -32,8 +34,9 @@ func interact() -> void:
 		return
 	_collected = true
 	GameState.collect_trophy(_trophy_id, _value)
+	GameState.eat_food(_food)  # harvest meat
 	queue_free()
 
 
 func get_prompt_text() -> String:
-	return "Recover %s  [E]" % _display_name
+	return "Recover %s  [E]  (+food)" % _display_name
