@@ -37,7 +37,8 @@ var _idle_wait: float = 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _rng := RandomNumberGenerator.new()
 var _rig: CreatureRig
-var _model: Node3D          # set instead of _rig when data.model_scene is used
+var _model: Node3D          # set instead of _rig when a real model is used
+var _anim: AnimationPlayer  # the model's animations, when present
 var _track_accum: float = 0.0
 var _last_track_pos: Vector3
 
@@ -253,10 +254,11 @@ func _die() -> void:
 	# Drop from the physics/creature layers so it no longer blocks or is chased.
 	set_deferred("collision_layer", 0)
 	set_deferred("collision_mask", 0)
-	var vis: Node3D = _rig if _rig else _model
-	if vis:
-		vis.rotation_degrees.z = 90.0  # topple over (crude until death anim)
-		vis.position.y = 0.4
+	if _anim:
+		_play_anim("Death")            # real model has a death animation
+	elif _rig:
+		_rig.rotation_degrees.z = 90.0 # procedural rig just topples over
+		_rig.position.y = 0.4
 	_spawn_trophy()
 	died.emit(self)
 
@@ -390,10 +392,16 @@ func _enter_state(new_state: State) -> void:
 	match new_state:
 		State.IDLE:
 			_idle_wait = _rng.randf_range(1.5, 4.0)
+			_play_anim("Idle")
 		State.WANDER:
 			_pick_wander_target()
-		State.FLEE:
-			pass
+			_play_anim("Walk")
+		State.INVESTIGATE:
+			_play_anim("Walk")
+		State.FLEE, State.HUNT:
+			_play_anim("Run")
+		State.ATTACK:
+			_play_anim("Attack")
 	state_changed.emit(new_state)
 
 
@@ -405,20 +413,76 @@ func _exit_state(_old_state: State) -> void:
 # Appearance — stylized procedural rig (seed for final sculpted models)
 # ---------------------------------------------------------------------------
 
+## Real CC0 animated models (Quaternius) mapped by species; the rest fall back
+## to the procedural rig. Predators without a dedicated model reuse the T-Rex.
+const MODEL_PATHS := {
+	&"velociraptor": "res://assets/creatures/velociraptor.glb",
+	&"tyrannosaurus": "res://assets/creatures/trex.glb",
+	&"triceratops": "res://assets/creatures/triceratops.glb",
+	&"brachiosaurus": "res://assets/creatures/apatosaurus.glb",
+	&"parasaurolophus": "res://assets/creatures/parasaurolophus.glb",
+	&"stegosaurus": "res://assets/creatures/stegosaurus.glb",
+	&"allosaurus": "res://assets/creatures/trex.glb",
+	&"spinosaurus": "res://assets/creatures/trex.glb",
+}
+
+
 func _build_visual() -> void:
 	if body_mesh:
 		body_mesh.visible = false  # hide the old debug box
-	# Drop-in seam: if a real model scene is assigned, use it instead of the rig.
-	if data.model_scene != null:
-		_model = data.model_scene.instantiate()
+	var scene: PackedScene = data.model_scene   # explicit override wins
+	if scene == null and MODEL_PATHS.has(data.species_id):
+		var p: String = MODEL_PATHS[data.species_id]
+		if ResourceLoader.exists(p):
+			scene = load(p)
+	if scene != null:
+		_model = scene.instantiate()
 		add_child(_model)
-		var ap := _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
-		if ap and ap.get_animation_list().size() > 0:
-			ap.play(ap.get_animation_list()[0])  # idle/first clip
+		_anim = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		_fit_model()
+		_play_anim("Idle")
 		return
 	_rig = CreatureRig.new()
 	add_child(_rig)
 	_rig.build(data)
+
+
+## Scale a real model to the species size, sit it on the ground, and face -Z.
+func _fit_model() -> void:
+	_model.rotation.y = PI            # Quaternius models face +Z; our forward is -Z
+	await get_tree().process_frame    # let global transforms settle
+	var a := _world_aabb(_model)
+	if a.size.y > 0.01:
+		_model.scale *= clampf(data.body_size.y / a.size.y, 0.02, 60.0)
+	await get_tree().process_frame
+	var b := _world_aabb(_model)
+	if b.size.y > 0.0:
+		_model.global_position.y += global_position.y - b.position.y   # feet to ground
+
+
+func _world_aabb(root: Node) -> AABB:
+	var out := AABB()
+	var started := false
+	for n in root.find_children("*", "VisualInstance3D", true, false):
+		var vi := n as VisualInstance3D
+		var world := vi.global_transform * vi.get_aabb()
+		if not started:
+			out = world
+			started = true
+		else:
+			out = out.merge(world)
+	return out
+
+
+## Play the model animation whose name ends with `suffix` (e.g. "Walk").
+func _play_anim(suffix: String) -> void:
+	if _anim == null:
+		return
+	for a in _anim.get_animation_list():
+		if a.to_lower().ends_with(suffix.to_lower()):
+			if _anim.current_animation != a:
+				_anim.play(a)
+			return
 
 
 # ---------------------------------------------------------------------------

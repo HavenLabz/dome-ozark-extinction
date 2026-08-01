@@ -602,8 +602,10 @@ const ROSTER := [
 	["res://data/creatures/black_bear.tres", 2, false],
 	# Resurrected prehistoric creatures, sharing the same wilderness.
 	["res://data/creatures/brachiosaurus.tres", 3, false],
-	["res://data/creatures/gallimimus.tres", 4, false],
+	["res://data/creatures/parasaurolophus.tres", 3, false],
+	["res://data/creatures/stegosaurus.tres", 2, false],
 	["res://data/creatures/triceratops.tres", 3, false],
+	["res://data/creatures/gallimimus.tres", 3, false],
 	["res://data/creatures/velociraptor.tres", 5, true],   # pack hunters
 	["res://data/creatures/allosaurus.tres", 2, false],
 	["res://data/creatures/spinosaurus.tres", 1, false],

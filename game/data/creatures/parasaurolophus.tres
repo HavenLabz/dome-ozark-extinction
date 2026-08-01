@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"parasaurolophus"
+display_name = "Parasaurolophus"
+diet = 0
+archetype = 3
+rarity = 2
+is_apex = false
+max_health = 150.0
+mass_kg = 2500.0
+walk_speed = 2.6
+run_speed = 10.5
+turn_speed = 7.0
+sight_range = 46.0
+sight_fov_deg = 280.0
+hearing_range = 32.0
+flee_distance = 24.0
+alert_memory = 8.0
+territory_radius = 60.0
+is_aggressive = false
+attack_range = 2.4
+attack_damage = 14.0
+attack_cooldown = 1.5
+trophy_id = &"parasaurolophus_trophy"
+trophy_value = 190
+body_size = Vector3(1.1, 2.7, 4.2)
+placeholder_color = Color(0.5, 0.42, 0.3, 1)

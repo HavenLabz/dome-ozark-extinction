@@ -1,0 +1,2 @@
+Quaternius Animated Dinosaur Bundle (CC0) — from poly.pizza. Free for commercial use.
+Animations per model: Idle, Walk, Run, Attack, Jump, Death.
