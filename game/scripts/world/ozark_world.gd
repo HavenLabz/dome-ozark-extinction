@@ -107,6 +107,25 @@ func _capture_screenshot() -> void:
 		get_tree().quit()
 		return
 
+	# Scope shot: force the rifle's scope optic + overlay.
+	if "--shotscope" in args:
+		var pl := get_tree().get_first_node_in_group("player")
+		if pl and pl.has_method("get_active_weapon"):
+			var wpn = pl.get_active_weapon()
+			if wpn:
+				wpn.cycle_optic(); wpn.cycle_optic()  # iron -> reflex -> scope
+				wpn.visible = false
+			pl.get_node("Head/Camera3D").fov = 20.0
+		var hud := get_node_or_null("HUD")
+		if hud and hud.has_method("_on_scope_changed"):
+			hud._on_scope_changed(true, "4x Hunting Scope")
+		await get_tree().create_timer(2.5).timeout
+		var img_s := get_viewport().get_texture().get_image()
+		img_s.save_png(path)
+		print("[shot] saved %s (%dx%d)" % [path, img_s.get_width(), img_s.get_height()])
+		get_tree().quit()
+		return
+
 	# Weapon shot: use the player's own camera (which holds the viewmodel).
 	if "--shotweapon" in args:
 		if "--ads" in args:

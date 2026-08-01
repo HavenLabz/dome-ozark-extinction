@@ -12,11 +12,14 @@ var _scan: Label
 var _extract: Label
 var _hitmark: Label
 var _hit_t: float = 0.0
+var _cross: Label
+var _scope: Control
 var _bound_weapon: Weapon
 
 
 func _ready() -> void:
 	_build()
+	_build_scope()
 	# Live vitals.
 	GameState.health_changed.connect(func(_v): _refresh_stats())
 	GameState.stamina_changed.connect(func(_v): _refresh_stats())
@@ -48,6 +51,8 @@ func _hook_player() -> void:
 		player.scan_info_changed.connect(_on_scan_changed)
 	if player.has_signal("hitmarker"):
 		player.hitmarker.connect(_on_hitmarker)
+	if player.has_signal("scope_changed"):
+		player.scope_changed.connect(_on_scope_changed)
 	# The initial weapon_changed fired during the player's _ready (before this
 	# deferred hookup), so bind the already-active weapon now.
 	if player.has_method("get_active_weapon"):
@@ -59,16 +64,25 @@ func _hook_player() -> void:
 func _on_weapon_changed(weapon: Weapon) -> void:
 	if _bound_weapon and _bound_weapon.ammo_changed.is_connected(_on_ammo_changed):
 		_bound_weapon.ammo_changed.disconnect(_on_ammo_changed)
+	if _bound_weapon and _bound_weapon.optic_changed.is_connected(_refresh_ammo):
+		_bound_weapon.optic_changed.disconnect(_refresh_ammo)
 	_bound_weapon = weapon
 	if weapon:
 		weapon.ammo_changed.connect(_on_ammo_changed)
-		var a := weapon.get_ammo()
+		weapon.optic_changed.connect(_refresh_ammo)
+		_refresh_ammo("")
+
+
+func _refresh_ammo(_optic: String) -> void:
+	if _bound_weapon:
+		var a := _bound_weapon.get_ammo()
 		_on_ammo_changed(a.x, a.y)
 
 
 func _on_ammo_changed(in_mag: int, reserve: int) -> void:
 	if _bound_weapon:
-		_ammo.text = "%s\n%d / %d" % [_bound_weapon.data.display_name, in_mag, reserve]
+		_ammo.text = "%s · %s\n%d / %d" % [
+			_bound_weapon.data.display_name, _bound_weapon.optic_name(), in_mag, reserve]
 
 
 func _on_scan_changed(text: String) -> void:
@@ -79,6 +93,60 @@ func _on_scan_changed(text: String) -> void:
 func _on_extract_status(text: String) -> void:
 	_extract.text = text
 	_extract.visible = text != ""
+
+
+func _on_scope_changed(active: bool, _optic_name: String) -> void:
+	if _scope:
+		_scope.visible = active
+	if _cross:
+		_cross.visible = not active   # hide the hip crosshair while scoped
+
+
+## Full-screen scope: black circular mask (shader) + a thin reticle cross.
+func _build_scope() -> void:
+	_scope = Control.new()
+	_scope.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_scope.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_scope.visible = false
+	add_child(_scope)
+
+	# reticle cross (drawn under the mask so it only shows inside the circle)
+	var vline := ColorRect.new()
+	vline.color = Color(0.05, 0.06, 0.05, 0.9)
+	vline.set_anchors_preset(Control.PRESET_VCENTER_WIDE)
+	vline.custom_minimum_size = Vector2(0, 2)
+	vline.anchor_top = 0.5; vline.anchor_bottom = 0.5; vline.offset_top = -1; vline.offset_bottom = 1
+	_scope.add_child(vline)
+	var hline := ColorRect.new()
+	hline.color = Color(0.05, 0.06, 0.05, 0.9)
+	hline.anchor_left = 0.5; hline.anchor_right = 0.5; hline.anchor_top = 0; hline.anchor_bottom = 1
+	hline.offset_left = -1; hline.offset_right = 1
+	_scope.add_child(hline)
+
+	# circular black-out mask on top
+	var mask := ColorRect.new()
+	mask.set_anchors_preset(Control.PRESET_FULL_RECT)
+	mask.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sh := Shader.new()
+	sh.code = """
+shader_type canvas_item;
+uniform float aspect = 1.777;
+void fragment(){
+	vec2 p = UV - vec2(0.5);
+	p.x *= aspect;
+	float d = length(p);
+	float outside = smoothstep(0.33, 0.345, d);
+	float ring = (smoothstep(0.315,0.33,d) - smoothstep(0.345,0.36,d));
+	vec3 col = mix(vec3(0.0), vec3(0.02,0.03,0.02), ring);
+	COLOR = vec4(col, max(outside, ring));
+}
+"""
+	var mat := ShaderMaterial.new()
+	mat.shader = sh
+	var vp := get_viewport().get_visible_rect().size
+	mat.set_shader_parameter("aspect", vp.x / maxf(1.0, vp.y))
+	mask.material = mat
+	_scope.add_child(mask)
 
 
 func _on_hitmarker(on_creature: bool) -> void:
@@ -114,13 +182,13 @@ func _refresh_score() -> void:
 
 func _build() -> void:
 	# Crosshair
-	var cross := Label.new()
-	cross.text = "+"
-	cross.add_theme_font_size_override("font_size", 22)
-	cross.set_anchors_preset(Control.PRESET_CENTER)
-	cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	_add_control(cross)
+	_cross = Label.new()
+	_cross.text = "+"
+	_cross.add_theme_font_size_override("font_size", 22)
+	_cross.set_anchors_preset(Control.PRESET_CENTER)
+	_cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_add_control(_cross)
 
 	# Hitmarker — flashes over the crosshair when a shot connects.
 	_hitmark = Label.new()

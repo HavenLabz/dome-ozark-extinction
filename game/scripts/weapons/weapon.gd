@@ -10,6 +10,8 @@ signal reload_started(seconds: float)
 signal fired()
 ## Emitted the instant a shot connects; on_creature true if it hit an animal.
 signal shot_hit(on_creature: bool)
+## Emitted when the attached optic changes (name for the HUD).
+signal optic_changed(name: String)
 
 @export var data: WeaponData
 
@@ -32,6 +34,8 @@ var _ads_pos: Vector3           # aim-down-sights position (centered)
 var _ads_active: bool = false
 var _steady: bool = false       # hold-breath
 var _aim_blend: float = 0.0     # 0 = hip, 1 = ADS
+var _optics: Array = []         # attachment slots: {name, fov, scoped}
+var _optic_idx: int = 0
 var _kick_pos: Vector3 = Vector3.ZERO
 var _kick_rot: float = 0.0
 var _rng := RandomNumberGenerator.new()
@@ -144,6 +148,26 @@ func set_ads(on: bool) -> void:
 ## Hold-breath steadies the weapon (tighter spread). Player sets this while ADS.
 func set_steady(on: bool) -> void:
 	_steady = on
+
+
+# --- Optics / attachments ---
+func cycle_optic() -> void:
+	if _optics.size() <= 1:
+		return
+	_optic_idx = (_optic_idx + 1) % _optics.size()
+	optic_changed.emit(optic_name())
+
+
+func optic_name() -> String:
+	return _optics[_optic_idx].name if _optics.size() > 0 else "Iron Sights"
+
+
+func optic_fov() -> float:
+	return _optics[_optic_idx].fov if _optics.size() > 0 else 50.0
+
+
+func optic_scoped() -> bool:
+	return _optics.size() > 0 and _optics[_optic_idx].scoped
 
 
 func current_spread(ads: bool) -> float:
@@ -261,6 +285,19 @@ func _build_viewmodel() -> void:
 		_part(Vector3(0.06, 0.16, 0.09), Vector3(0, -0.12, 0.05), mat)      # magazine
 		_part(Vector3(0.07, 0.09, 0.20), Vector3(0, -0.01, 0.28), mat)      # stock
 		_muzzle = _point(Vector3(0, 0.02, -0.56))
+
+	# Optic loadout (cycle with V). Rifles can mount a scope.
+	if data.body_style == "PISTOL":
+		_optics = [
+			{"name": "Iron Sights", "fov": 52.0, "scoped": false},
+			{"name": "Reflex Sight", "fov": 46.0, "scoped": false},
+		]
+	else:
+		_optics = [
+			{"name": "Iron Sights", "fov": 50.0, "scoped": false},
+			{"name": "Reflex Sight", "fov": 44.0, "scoped": false},
+			{"name": "4x Hunting Scope", "fov": 20.0, "scoped": true},
+		]
 
 	position = _rest_pos
 

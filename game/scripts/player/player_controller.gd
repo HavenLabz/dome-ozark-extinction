@@ -31,6 +31,8 @@ signal weapon_changed(weapon: Weapon)
 signal scan_info_changed(text: String)
 ## Emitted when a shot connects, so the HUD can flash a hitmarker.
 signal hitmarker(on_creature: bool)
+## Emitted when the scope overlay should show/hide (true when ADS with a scope).
+signal scope_changed(active: bool, optic_name: String)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
@@ -52,6 +54,7 @@ var _weapons: Array[Weapon] = []
 var _weapon_idx: int = -1
 var _ads: bool = false
 var _holding_breath: bool = false
+var _scope_active: bool = false
 var _scanning: bool = false
 var _recoil_pitch: float = 0.0   # accumulated, recovered each frame
 var _recoil_yaw: float = 0.0
@@ -105,6 +108,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_switch_weapon(0)
 	elif event.is_action_pressed("weapon_2"):
 		_switch_weapon(1)
+	elif event.is_action_pressed("optic_cycle"):
+		var w := _current_weapon()
+		if w:
+			w.cycle_optic()
 	elif event.is_action_pressed("extract"):
 		var ex := get_tree().get_first_node_in_group("extraction")
 		if ex:
@@ -240,13 +247,20 @@ func _handle_weapons(delta: float) -> void:
 	_ads = Input.is_action_pressed("aim") and captured
 	_holding_breath = _ads and Input.is_action_pressed("sprint")
 	var target_fov := default_fov
-	if _ads:
-		target_fov = ads_fov * (0.82 if _holding_breath else 1.0)
+	if _ads and w != null:
+		target_fov = w.optic_fov() * (0.85 if _holding_breath else 1.0)
 	camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 12.0, 0.0, 1.0))
 
+	# Scope overlay when aiming a scoped optic; the viewmodel hides so it reads clean.
+	var scoped_now := _ads and w != null and w.optic_scoped()
+	if scoped_now != _scope_active:
+		_scope_active = scoped_now
+		scope_changed.emit(scoped_now, w.optic_name() if w else "")
+
 	if w != null:
-		w.set_ads(_ads)   # raise/lower the sights on the viewmodel
+		w.set_ads(_ads and not scoped_now)   # hide viewmodel in scope; iron/reflex keep it
 		w.set_steady(_holding_breath)
+		w.visible = not scoped_now
 	if w != null and captured:
 		var wants_fire := false
 		if w.data.fire_mode == WeaponData.FireMode.AUTO:
