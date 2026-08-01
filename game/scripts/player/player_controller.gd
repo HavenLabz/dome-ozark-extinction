@@ -123,6 +123,13 @@ func _body_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> vo
 
 
 func _build_weapons() -> void:
+	# Use the loadout chosen on the deployment screen, if any.
+	if not GameState.loadout_weapons.is_empty():
+		weapon_loadout = []
+		for p in GameState.loadout_weapons:
+			var wd := load(p) as WeaponData
+			if wd:
+				weapon_loadout.append(wd)
 	if weapon_loadout.is_empty():
 		weapon_loadout = [
 			load("res://data/weapons/ar15.tres"),
@@ -250,6 +257,9 @@ func _regen_stamina(delta: float) -> void:
 ## True when the player is moving noisily. Sprinting is loud; prone is silent.
 ## Creatures' hearing uses this (COD-style stealth via stance).
 func is_making_noise() -> bool:
+	# The scent mask (deployment gear) keeps you quiet even at a sprint.
+	if GameState.gear.get("scent", false):
+		return false
 	return _is_sprinting and _stance == Stance.STAND
 
 

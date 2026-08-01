@@ -39,6 +39,27 @@ var is_extraction_available: bool = false
 ## frame. Wildlife reads this to decide whether to shelter / hunker down.
 var storm_intensity: float = 0.0
 
+# --- Hunt loadout (chosen on the deployment screen, Carnivores-style) ---
+## Weapon .tres paths the player deploys with. Empty = default loadout.
+var loadout_weapons: Array[String] = []
+## Species the player has flagged as targets this trip (for objectives/score).
+var target_species: Array[StringName] = []
+## Field gear: each aid makes the hunt easier but taxes your final score.
+var gear := {"scent": false, "tracker": false, "ghillie": false}
+## Score multiplier (1.0 = pure/fair-chase). Each gear item lowers it.
+var score_purity: float = 1.0
+## Filled in at extraction so the front-end can show a results card.
+var last_result: Dictionary = {}
+
+
+## Purity multiplier from the currently-selected gear (−15% per aid).
+func compute_purity() -> float:
+	var p := 1.0
+	for k in gear:
+		if gear[k]:
+			p -= 0.15
+	return maxf(0.4, p)
+
 # --- Survival ---
 # Tuned to real-wilderness pacing: you're dropped in the wild, not on a timer.
 # Thirst is the first real concern (~21 min from full to empty), hunger far

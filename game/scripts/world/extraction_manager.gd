@@ -23,6 +23,22 @@ var _msg_clear_t: float = 0.0
 
 func _ready() -> void:
 	add_to_group("extraction")
+	GameState.player_died.connect(_on_player_died)
+
+
+func _on_player_died() -> void:
+	if _phase == Phase.EXTRACTED:
+		return
+	GameState.last_result = {
+		"extracted": false,
+		"trophies": GameState.trophies_collected.size(),
+		"raw": GameState.trophy_score,
+		"purity": GameState.score_purity,
+		"final": 0,
+	}
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var t := get_tree().create_timer(3.0, true)
+	t.timeout.connect(func(): get_tree().change_scene_to_file("res://scenes/frontend.tscn"))
 
 
 func can_extract() -> bool:
@@ -120,11 +136,21 @@ func _fly_helicopter(delta: float) -> void:
 
 func _complete() -> void:
 	_phase = Phase.EXTRACTED
-	status_changed.emit("EXTRACTED!\nTrophies: %d    Score: %d\n\nThe Ozark Dome holds — for now." % [
-		GameState.trophies_collected.size(), GameState.trophy_score])
+	# Final score = raw trophy score scaled by fair-chase purity (gear taxes it).
+	var raw: int = GameState.trophy_score
+	var final: int = int(round(raw * GameState.score_purity))
+	GameState.last_result = {
+		"extracted": true,
+		"trophies": GameState.trophies_collected.size(),
+		"raw": raw,
+		"purity": GameState.score_purity,
+		"final": final,
+	}
+	status_changed.emit("EXTRACTED!  Final score: %d\nReturning to base..." % final)
 	GameState.is_extraction_available = true
-	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	var t := get_tree().create_timer(4.5, true)
+	t.timeout.connect(func(): get_tree().change_scene_to_file("res://scenes/frontend.tscn"))
 
 
 func _box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
