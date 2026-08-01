@@ -23,12 +23,16 @@ extends CharacterBody3D
 signal interact_prompt_changed(text: String)
 ## Emitted when the active weapon changes (HUD binds to the new weapon).
 signal weapon_changed(weapon: Weapon)
+## Emitted with a creature's field-guide text while scanning through binoculars
+## (empty string clears it).
+signal scan_info_changed(text: String)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
 
 const _MASK_INTERACTABLES := 16
+const _MASK_CREATURES := 4
 const WEAPON_SCENE := preload("res://scripts/weapons/weapon.gd")
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
@@ -41,6 +45,7 @@ var _current_prompt: String = ""
 var _weapons: Array[Weapon] = []
 var _weapon_idx: int = -1
 var _ads: bool = false
+var _scanning: bool = false
 var _recoil_pitch: float = 0.0   # accumulated, recovered each frame
 var _recoil_yaw: float = 0.0
 
@@ -92,6 +97,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		_switch_weapon(0)
 	elif event.is_action_pressed("weapon_2"):
 		_switch_weapon(1)
+	elif event.is_action_pressed("extract"):
+		var ex := get_tree().get_first_node_in_group("extraction")
+		if ex:
+			ex.begin_extraction(global_position)
 
 
 func _physics_process(delta: float) -> void:
@@ -186,14 +195,30 @@ func _switch_weapon(idx: int) -> void:
 
 
 func _handle_weapons(delta: float) -> void:
+	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	var w := _current_weapon()
+
+	# Binoculars (hold B): deep zoom + scan creatures; weapon lowered, no firing.
+	if captured and Input.is_action_pressed("binoculars"):
+		camera.fov = lerpf(camera.fov, 20.0, clampf(delta * 10.0, 0.0, 1.0))
+		if w:
+			w.visible = false
+		_scan_through_binoculars()
+		_recover_recoil(delta)
+		return
+	if w and not w.visible:
+		w.visible = true
+	if _scanning:
+		_scanning = false
+		scan_info_changed.emit("")
+
 	# Aim-down-sights.
-	_ads = Input.is_action_pressed("aim") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	_ads = Input.is_action_pressed("aim") and captured
 	camera.fov = lerpf(camera.fov, ads_fov if _ads else default_fov, clampf(delta * 12.0, 0.0, 1.0))
 
-	var w := _current_weapon()
 	if w != null:
 		w.set_ads(_ads)   # raise/lower the sights on the viewmodel
-	if w != null and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	if w != null and captured:
 		var wants_fire := false
 		if w.data.fire_mode == WeaponData.FireMode.AUTO:
 			wants_fire = Input.is_action_pressed("fire")
@@ -203,6 +228,16 @@ func _handle_weapons(delta: float) -> void:
 			_add_recoil(w.data)
 
 	_recover_recoil(delta)
+
+
+func _scan_through_binoculars() -> void:
+	var hit := _cast_from_camera(400.0, 1 | _MASK_CREATURES)  # world blocks the view
+	var collider: Object = hit.get("collider") if not hit.is_empty() else null
+	var text := ""
+	if collider != null and collider.has_method("get_scan_text"):
+		text = collider.get_scan_text()
+	_scanning = true
+	scan_info_changed.emit(text)
 
 
 func _add_recoil(wd: WeaponData) -> void:

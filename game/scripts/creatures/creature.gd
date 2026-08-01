@@ -431,6 +431,21 @@ func use_navigation_map(map: RID) -> void:
 		nav.set_navigation_map(map)
 
 
+## Field-guide readout shown when scanned through binoculars.
+func get_scan_text() -> String:
+	var threat := "Passive grazer"
+	if data.is_apex:
+		threat = "APEX — EXTREME"
+	elif data.is_aggressive:
+		threat = "Predator — High"
+	elif data.diet == CreatureData.Diet.OMNIVORE:
+		threat = "Dangerous if provoked"
+	var stars := ""
+	for i in data.rarity:
+		stars += "*"
+	return "%s\nThreat: %s\nTrophy: %d  %s" % [data.display_name, threat, data.trophy_value, stars]
+
+
 func get_state() -> State:
 	return _state
 

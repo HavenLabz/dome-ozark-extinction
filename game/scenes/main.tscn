@@ -1,4 +1,4 @@
-[gd_scene load_steps=10 format=3]
+[gd_scene load_steps=11 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/ozark_world.gd" id="1_world"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -6,6 +6,7 @@
 [ext_resource type="Resource" path="res://data/creatures/ridge_raptor.tres" id="4_raptor"]
 [ext_resource type="Script" path="res://scripts/ui/hud.gd" id="5_hud"]
 [ext_resource type="Script" path="res://scripts/world/day_night.gd" id="6_daynight"]
+[ext_resource type="Script" path="res://scripts/world/extraction_manager.gd" id="7_extract"]
 
 [sub_resource type="ProceduralSkyMaterial" id="ProceduralSkyMaterial_sky"]
 sky_top_color = Color(0.28, 0.45, 0.72, 1)
@@ -78,3 +79,6 @@ script = ExtResource("5_hud")
 
 [node name="DayNight" type="Node" parent="."]
 script = ExtResource("6_daynight")
+
+[node name="Extraction" type="Node3D" parent="."]
+script = ExtResource("7_extract")

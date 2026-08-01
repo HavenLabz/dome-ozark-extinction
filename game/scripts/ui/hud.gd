@@ -8,6 +8,8 @@ var _stats: Label
 var _prompt: Label
 var _score: Label
 var _ammo: Label
+var _scan: Label
+var _extract: Label
 var _bound_weapon: Weapon
 
 
@@ -21,8 +23,15 @@ func _ready() -> void:
 	GameState.trophy_collected.connect(func(_id, _val): _refresh_score())
 	_refresh_stats()
 	_refresh_score()
-	# Player-driven interaction prompt.
+	# Player-driven interaction prompt + extraction status.
 	call_deferred("_hook_player")
+	call_deferred("_hook_extraction")
+
+
+func _hook_extraction() -> void:
+	var ex := get_tree().get_first_node_in_group("extraction")
+	if ex and ex.has_signal("status_changed"):
+		ex.status_changed.connect(_on_extract_status)
 
 
 func _hook_player() -> void:
@@ -33,6 +42,8 @@ func _hook_player() -> void:
 		player.interact_prompt_changed.connect(_on_prompt_changed)
 	if player.has_signal("weapon_changed"):
 		player.weapon_changed.connect(_on_weapon_changed)
+	if player.has_signal("scan_info_changed"):
+		player.scan_info_changed.connect(_on_scan_changed)
 	# The initial weapon_changed fired during the player's _ready (before this
 	# deferred hookup), so bind the already-active weapon now.
 	if player.has_method("get_active_weapon"):
@@ -54,6 +65,16 @@ func _on_weapon_changed(weapon: Weapon) -> void:
 func _on_ammo_changed(in_mag: int, reserve: int) -> void:
 	if _bound_weapon:
 		_ammo.text = "%s\n%d / %d" % [_bound_weapon.data.display_name, in_mag, reserve]
+
+
+func _on_scan_changed(text: String) -> void:
+	_scan.text = text
+	_scan.visible = text != ""
+
+
+func _on_extract_status(text: String) -> void:
+	_extract.text = text
+	_extract.visible = text != ""
 
 
 func _on_prompt_changed(text: String) -> void:
@@ -108,6 +129,27 @@ func _build() -> void:
 	_ammo.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
 	_ammo.add_theme_font_size_override("font_size", 22)
 	_add_control(_ammo)
+
+	# Binocular scan readout, upper-center.
+	_scan = _make_label(Vector2.ZERO)
+	_scan.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_scan.position = Vector2(-120, 90)
+	_scan.size = Vector2(240, 80)
+	_scan.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_scan.add_theme_font_size_override("font_size", 20)
+	_scan.visible = false
+	_add_control(_scan)
+
+	# Extraction status banner, upper-center.
+	_extract = _make_label(Vector2.ZERO)
+	_extract.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_extract.position = Vector2(-260, 40)
+	_extract.size = Vector2(520, 90)
+	_extract.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_extract.add_theme_font_size_override("font_size", 26)
+	_extract.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3))
+	_extract.visible = false
+	_add_control(_extract)
 
 
 func _make_label(pos: Vector2) -> Label:
