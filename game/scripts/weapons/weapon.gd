@@ -264,27 +264,44 @@ func _set_flash(on: bool) -> void:
 # ---------------------------------------------------------------------------
 
 func _build_viewmodel() -> void:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = data.tint
-	mat.metallic = 0.6
-	mat.roughness = 0.4
+	# Real material set: dark gunmetal, matte polymer, FDE furniture, tactical
+	# glove, olive sleeve. `body` carries the weapon's data tint on the receiver.
+	var metal := _mk_mat(Color(0.11, 0.11, 0.12), 0.9, 0.32)
+	var polymer := _mk_mat(Color(0.06, 0.06, 0.07), 0.1, 0.62)
+	var furn := _mk_mat(Color(0.44, 0.37, 0.26), 0.0, 0.6)
+	var glove := _mk_mat(Color(0.12, 0.11, 0.10), 0.0, 0.85)
+	var sleeve := _mk_mat(Color(0.20, 0.26, 0.19), 0.0, 0.82)
+	var body := _mk_mat(data.tint, 0.55, 0.42)
 
 	if data.body_style == "PISTOL":
 		_rest_pos = Vector3(0.22, -0.20, -0.45)
 		# ADS: centered so the slide sits on the screen axis (sights up).
 		_ads_pos = Vector3(0.0, -0.045, -0.30)
-		_part(Vector3(0.07, 0.09, 0.28), Vector3(0, 0.02, -0.02), mat)      # slide
-		_part(Vector3(0.06, 0.16, 0.08), Vector3(0, -0.10, 0.06), mat)      # grip
-		_muzzle = _point(Vector3(0, 0.03, -0.18))
+		_part(Vector3(0.052, 0.072, 0.30), Vector3(0, 0.03, -0.03), metal)    # slide
+		_part(Vector3(0.05, 0.05, 0.20), Vector3(0, 0.0, -0.10), metal)       # frame/dust cover
+		_part(Vector3(0.048, 0.13, 0.07), Vector3(0, -0.085, 0.055), polymer) # grip
+		_part(Vector3(0.05, 0.028, 0.11), Vector3(0, -0.028, 0.015), polymer) # trigger guard
+		_part(Vector3(0.012, 0.02, 0.012), Vector3(0, 0.076, -0.16), metal)   # front sight
+		_part(Vector3(0.03, 0.02, 0.012), Vector3(0, 0.076, 0.10), metal)     # rear sight
+		_muzzle = _point(Vector3(0, 0.03, -0.19))
+		# Two-handed pistol grip: firing hand on the grip, support hand cupped under.
+		_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
 	else:  # RIFLE
 		_rest_pos = Vector3(0.26, -0.22, -0.55)
 		# ADS: centered + a touch closer, receiver on the screen axis.
 		_ads_pos = Vector3(0.0, -0.05, -0.34)
-		_part(Vector3(0.08, 0.10, 0.42), Vector3(0, 0, 0), mat)             # receiver
-		_part(Vector3(0.05, 0.05, 0.40), Vector3(0, 0.02, -0.36), mat)      # barrel/handguard
-		_part(Vector3(0.06, 0.16, 0.09), Vector3(0, -0.12, 0.05), mat)      # magazine
-		_part(Vector3(0.07, 0.09, 0.20), Vector3(0, -0.01, 0.28), mat)      # stock
-		_muzzle = _point(Vector3(0, 0.02, -0.56))
+		_part(Vector3(0.07, 0.09, 0.42), Vector3(0, 0, 0), body)             # receiver (tinted)
+		_part(Vector3(0.042, 0.042, 0.46), Vector3(0, 0.03, -0.42), metal)   # barrel
+		_part(Vector3(0.058, 0.055, 0.26), Vector3(0, 0.005, -0.30), furn)   # handguard
+		_part(Vector3(0.055, 0.15, 0.085), Vector3(0, -0.125, 0.05), polymer)# magazine
+		_part(Vector3(0.05, 0.11, 0.07), Vector3(0, -0.095, 0.14), polymer)  # pistol grip
+		_part(Vector3(0.062, 0.10, 0.22), Vector3(0, -0.005, 0.31), furn)    # stock
+		_part(Vector3(0.03, 0.022, 0.32), Vector3(0, 0.072, -0.06), polymer) # top rail
+		_part(Vector3(0.012, 0.026, 0.012), Vector3(0, 0.10, -0.34), metal)  # front sight post
+		_part(Vector3(0.036, 0.026, 0.012), Vector3(0, 0.10, 0.15), metal)   # rear aperture
+		_muzzle = _point(Vector3(0, 0.03, -0.62))
+		# Support hand on the handguard, firing hand on the grip.
+		_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
 
 	# Optic loadout (cycle with V). Rifles can mount a scope.
 	if data.body_style == "PISTOL":
@@ -332,6 +349,55 @@ func _part(size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
 	mi.mesh = b
 	mi.position = pos
 	mi.material_override = mat
+	add_child(mi)
+	return mi
+
+
+func _mk_mat(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = color
+	m.metallic = metallic
+	m.roughness = roughness
+	return m
+
+
+## First-person arms: a gloved hand on the gun at each grip point, with an
+## olive-sleeved forearm running back toward the shoulder. Children of the
+## weapon, so they ride every kick, sway and ADS move with it.
+func _build_arms(support_hand: Vector3, firing_hand: Vector3, glove: Material, sleeve: Material) -> void:
+	# Firing (right) hand + forearm from the right shoulder.
+	_hand(firing_hand, glove)
+	_limb(Vector3(0.14, -0.36, 0.42), firing_hand, 0.052, sleeve)
+	# Support (left) hand + forearm from the left shoulder.
+	_hand(support_hand, glove)
+	_limb(Vector3(-0.14, -0.36, 0.46), support_hand, 0.052, sleeve)
+
+
+## A gloved hand: a palm block plus a wrap of fingers curling over the grip.
+func _hand(pos: Vector3, glove: Material) -> void:
+	var palm := _part(Vector3(0.058, 0.05, 0.085), pos, glove)
+	palm.rotation.x = 0.35
+	# Four fingers wrapping down over the front of the grip.
+	var fingers := _part(Vector3(0.056, 0.055, 0.02), pos + Vector3(0, -0.012, -0.05), glove)
+	fingers.rotation.x = 0.5
+	# Thumb along the side.
+	var thumb := _part(Vector3(0.02, 0.02, 0.05), pos + Vector3(0.03, 0.006, 0.0), glove)
+
+
+## A tapered limb segment from `from` to `to`, oriented along the line.
+func _limb(from: Vector3, to: Vector3, thick: float, mat: Material) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	var b := BoxMesh.new()
+	var length := from.distance_to(to)
+	b.size = Vector3(thick, thick, length)
+	mi.mesh = b
+	mi.material_override = mat
+	var dir := (to - from).normalized()
+	var up := Vector3.UP
+	if absf(dir.dot(up)) > 0.99:
+		up = Vector3.RIGHT
+	var xf := Transform3D(Basis.looking_at(dir, up), (from + to) * 0.5)
+	mi.transform = xf
 	add_child(mi)
 	return mi
 

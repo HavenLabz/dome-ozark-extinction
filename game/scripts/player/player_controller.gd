@@ -77,6 +77,49 @@ func _ready() -> void:
 	_flashlight.spot_attenuation = 0.6
 	_flashlight.visible = false
 	camera.add_child(_flashlight)
+	_build_body()
+
+
+## A first-person clothed body — torso, legs, boots — parented to the yaw head so
+## it turns with you but stays upright when you look down (you see your own gear).
+func _build_body() -> void:
+	var jacket := StandardMaterial3D.new()
+	jacket.albedo_color = Color(0.19, 0.24, 0.18)   # olive field jacket
+	jacket.roughness = 0.85
+	var pants := StandardMaterial3D.new()
+	pants.albedo_color = Color(0.28, 0.26, 0.20)    # tan cargo pants
+	pants.roughness = 0.9
+	var boots := StandardMaterial3D.new()
+	boots.albedo_color = Color(0.08, 0.07, 0.06)
+	boots.roughness = 0.7
+	var vest := StandardMaterial3D.new()
+	vest.albedo_color = Color(0.10, 0.11, 0.10)     # chest rig
+	vest.roughness = 0.8
+
+	var body := Node3D.new()
+	body.name = "FPBody"
+	# Hang below the eye line; the head node sits at eye height.
+	body.position = Vector3(0.0, -0.15, 0.0)
+	head.add_child(body)
+
+	_body_box(body, Vector3(0.42, 0.5, 0.26), Vector3(0.0, -0.62, 0.05), jacket)   # torso
+	_body_box(body, Vector3(0.34, 0.22, 0.2), Vector3(0.0, -0.5, 0.02), vest)      # chest rig
+	# Legs + boots (slightly splayed).
+	for s in [-1.0, 1.0]:
+		_body_box(body, Vector3(0.16, 0.6, 0.18), Vector3(s * 0.12, -1.2, 0.02), pants)
+		_body_box(body, Vector3(0.17, 0.14, 0.3), Vector3(s * 0.12, -1.55, -0.04), boots)
+
+
+func _body_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var b := BoxMesh.new()
+	b.size = size
+	mi.mesh = b
+	mi.position = pos
+	mi.material_override = mat
+	# Don't let the body block the camera's near plane when looking straight down.
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+	parent.add_child(mi)
 
 
 func _build_weapons() -> void:
