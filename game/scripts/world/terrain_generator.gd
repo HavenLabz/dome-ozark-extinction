@@ -39,11 +39,29 @@ func _configure_noise() -> void:
 	_detail.fractal_octaves = 2
 
 
+## Winding river valley (real Ozark spring-fed stream) carved through the hills.
+@export var river_amplitude: float = 55.0   # how far the channel meanders in X
+@export var river_frequency: float = 0.017
+@export var river_half_width: float = 15.0
+@export var river_depth: float = 7.0
+
+
 ## World-space ground height at (x, z).
 func height_at(x: float, z: float) -> float:
 	var h := _hill.get_noise_2d(x, z) * height_amp
 	h += _detail.get_noise_2d(x, z) * detail_amp
+	# Carve a meandering river valley so the water plane fills a real channel.
+	var river_x := river_amplitude * sin(z * river_frequency)
+	var d := absf(x - river_x)
+	if d < river_half_width:
+		var t := d / river_half_width           # 0 at centerline, 1 at bank
+		h -= (1.0 - smoothstep(0.0, 1.0, t)) * river_depth
 	return h
+
+
+## X coordinate of the river centerline at depth z (for spawning banks etc.).
+func river_center_x(z: float) -> float:
+	return river_amplitude * sin(z * river_frequency)
 
 
 func surface_point(x: float, z: float) -> Vector3:

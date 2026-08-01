@@ -8,7 +8,7 @@ class_name OzarkWorld
 ## numbers reshapes the whole world. Data-driven spawns (North Star): add a
 ## species .tres and a spawn line, no new code.
 
-@export var tree_count: int = 130
+@export var tree_count: int = 320
 @export var player_start := Vector2(0.0, 20.0)   # (x, z) on the map
 @export var spawn_seed: int = 4711
 
@@ -35,9 +35,12 @@ var _water_level: float = -1.5
 func _ready() -> void:
 	_rng.seed = spawn_seed
 
-	# 1. Ground
+	# 1. Ground — a large, open Ozark valley so wildlife spreads out naturally.
 	terrain = TerrainGenerator.new()
 	terrain.name = "Terrain"
+	terrain.world_size = 440.0
+	terrain.resolution = 120
+	terrain.height_amp = 7.0         # gentle Ozark rolling hills (bluffs are separate)
 	terrain.water_level = _water_level  # so shoreline sand lines up with the water
 	nav_region.add_child(terrain)
 	terrain.build()
@@ -133,8 +136,8 @@ func _capture_screenshot() -> void:
 		cam.global_position = g + Vector3.UP * 1.6
 		cam.look_at(g + Vector3(6, 1.0, -18), Vector3.UP)
 	else:
-		cam.global_position = Vector3(38, terrain.height_at(38, 46) + 15.0, 46)
-		cam.look_at(Vector3(-6, 2, -12), Vector3.UP)
+		cam.global_position = Vector3(60, terrain.height_at(60, 90) + 55.0, 110)
+		cam.look_at(Vector3(-10, 0, -30), Vector3.UP)
 	cam.current = true
 	# Let shaders, shadows, and volumetric fog settle.
 	await get_tree().create_timer(2.5).timeout
@@ -159,7 +162,12 @@ func _scatter_forest() -> void:
 		# Keep the player's landing zone clear.
 		if Vector2(x, z).distance_to(player_start) < 6.0:
 			continue
-		nav_region.add_child(_make_tree(p, _rng.randf_range(0.8, 1.5)))
+		# Real Ozark forest is oak-hickory dominant with shortleaf pine mixed in.
+		var scale := _rng.randf_range(0.8, 1.5)
+		if _rng.randf() < 0.62:
+			nav_region.add_child(_make_broadleaf_tree(p, scale))
+		else:
+			nav_region.add_child(_make_tree(p, scale))
 
 
 func _make_tree(base: Vector3, scale: float) -> StaticBody3D:
@@ -210,7 +218,7 @@ func _make_tree(base: Vector3, scale: float) -> StaticBody3D:
 
 ## Dense wind-swayed grass via a single MultiMesh (one draw call).
 ## Each tuft is a crossed pair of quads so it reads as grass from any angle.
-func _scatter_grass(blade_count: int = 22000) -> void:
+func _scatter_grass(blade_count: int = 45000) -> void:
 	var blade := _make_grass_tuft_mesh(0.28, 0.42)
 	var mat := _make_foliage_material(Color(0.18, 0.27, 0.10), Color(0.36, 0.48, 0.19))
 	mat.set_shader_parameter("height_ref", 0.42)
@@ -268,6 +276,65 @@ func _add_birds() -> void:
 	flock.name = "Birds"
 	flock.center = Vector3(0, 34, 0)
 	add_child(flock)
+
+
+## Rounded broadleaf (oak/hickory) with occasional autumn color — the Ozark
+## forest's dominant tree, contrasting the conical pines.
+func _make_broadleaf_tree(base: Vector3, scale: float) -> StaticBody3D:
+	var tree := StaticBody3D.new()
+	tree.collision_layer = 1
+	tree.collision_mask = 0
+	tree.position = base
+	tree.rotation.y = _rng.randf_range(0.0, TAU)
+
+	var trunk_h := 3.4 * scale
+	var trunk := MeshInstance3D.new()
+	var tm := CylinderMesh.new()
+	tm.top_radius = 0.22 * scale
+	tm.bottom_radius = 0.5 * scale
+	tm.height = trunk_h
+	trunk.mesh = tm
+	trunk.position.y = trunk_h * 0.5
+	var bark := _rng.randf_range(-0.03, 0.03)
+	trunk.material_override = _solid_mat(Color(0.31 + bark, 0.23 + bark, 0.15))
+	tree.add_child(trunk)
+
+	# Canopy color: mostly green, ~28% autumn gold/red (real Ozark fall).
+	var bottom: Color
+	var top: Color
+	if _rng.randf() < 0.28:
+		bottom = Color(0.34, 0.20, 0.06)
+		top = Color(0.72, 0.44, 0.12).lerp(Color(0.68, 0.20, 0.10), _rng.randf())
+	else:
+		bottom = Color(0.12, 0.24, 0.09)
+		top = Color(0.27, 0.43, 0.16).lerp(Color(0.36, 0.46, 0.15), _rng.randf())
+	var fmat := _make_foliage_material(bottom, top)
+	fmat.set_shader_parameter("height_ref", 0.7)
+	fmat.set_shader_parameter("sway_strength", 0.14)
+
+	# Rounded canopy from a few overlapping blobs.
+	var canopy_y := trunk_h + 1.2 * scale
+	for i in _rng.randi_range(3, 4):
+		var blob := MeshInstance3D.new()
+		var sph := SphereMesh.new()
+		sph.radius = 0.5
+		sph.height = 1.0
+		blob.mesh = sph
+		var r := _rng.randf_range(1.7, 2.5) * scale
+		blob.scale = Vector3(r, r * 0.85, r)
+		blob.position = Vector3(_rng.randf_range(-1.0, 1.0) * scale,
+			canopy_y + _rng.randf_range(-0.3, 0.7) * scale, _rng.randf_range(-1.0, 1.0) * scale)
+		blob.material_override = fmat
+		tree.add_child(blob)
+
+	var col := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.5 * scale
+	shape.height = trunk_h
+	col.shape = shape
+	col.position.y = trunk_h * 0.5
+	tree.add_child(col)
+	return tree
 
 
 func _make_foliage_material(bottom: Color, top: Color) -> ShaderMaterial:
@@ -396,8 +463,8 @@ func _add_box(body: StaticBody3D, size: Vector3, pos: Vector3, mat: Material) ->
 
 func _bake_navigation() -> void:
 	var navmesh := NavigationMesh.new()
-	navmesh.cell_size = 0.25
-	navmesh.cell_height = 0.25          # match the navigation map to avoid edge errors
+	navmesh.cell_size = 0.5             # coarser cells keep the bake fast on the big map
+	navmesh.cell_height = 0.5           # match the navigation map to avoid edge errors
 	navmesh.agent_radius = 0.5          # exact multiple of cell_size (no precision loss)
 	navmesh.agent_height = 2.0          # exact multiple of cell_height
 	navmesh.agent_max_climb = 0.5
@@ -445,46 +512,83 @@ func _place_player() -> void:
 
 
 ## The dome's ecosystem — grazers + predators + apex. Add a line to grow it.
+## [path, count, is_pack]. Herbivores/lone predators spread across the valley;
+## raptors spawn as one coordinated pack (intelligent group hunters).
 const ROSTER := [
-	["res://data/creatures/brachiosaurus.tres", 3],
-	["res://data/creatures/gallimimus.tres", 6],
-	["res://data/creatures/triceratops.tres", 3],
-	["res://data/creatures/velociraptor.tres", 4],
-	["res://data/creatures/allosaurus.tres", 2],
-	["res://data/creatures/spinosaurus.tres", 1],
-	["res://data/creatures/tyrannosaurus.tres", 1],
+	["res://data/creatures/brachiosaurus.tres", 3, false],
+	["res://data/creatures/gallimimus.tres", 5, false],
+	["res://data/creatures/triceratops.tres", 3, false],
+	["res://data/creatures/velociraptor.tres", 5, true],   # pack hunters
+	["res://data/creatures/allosaurus.tres", 2, false],
+	["res://data/creatures/spinosaurus.tres", 1, false],
+	["res://data/creatures/tyrannosaurus.tres", 1, false],
 ]
+
+var _placed: Array[Vector2] = []  # spawn XZ positions, for separation
+
 
 func _spawn_wildlife() -> void:
 	for entry in ROSTER:
-		_spawn_species(load(entry[0]), entry[1])
+		_spawn_species(load(entry[0]), entry[1], entry[2])
 
 
-func _spawn_species(data: CreatureData, count: int) -> void:
+## Minimum distance a species spawns from the player's landing zone — apex and
+## predators stay far so encounters are earned, not immediate (Jurassic-Park pacing).
+func _min_player_dist(data: CreatureData) -> float:
+	if data.is_apex:
+		return 150.0
+	if data.is_aggressive:
+		return 100.0
+	return 45.0
+
+
+func _spawn_species(data: CreatureData, count: int, is_pack: bool) -> void:
 	if data == null:
 		return
-	var half := terrain.world_size * 0.5 - 10.0
-	# Apex predators start well away so the player isn't mauled at spawn.
-	var min_dist := 60.0 if data.is_apex else 18.0
-	for i in count:
-		var placed := false
-		for attempt in 16:
-			var x := _rng.randf_range(-half, half)
-			var z := _rng.randf_range(-half, half)
-			var p := terrain.surface_point(x, z)
-			if p.y < _water_level + 0.5:
-				continue
-			if Vector2(x, z).distance_to(player_start) < min_dist:
-				continue
-			var c := CREATURE_SCENE.instantiate() as Creature
-			c.data = data
-			creatures_root.add_child(c)
-			c.global_position = p + Vector3.UP * 0.2
-			c.use_navigation_map(nav_map)  # route on the dome's dedicated map
-			placed = true
-			break
-		if not placed:
-			push_warning("Could not place a %s after several attempts." % data.display_name)
+	if is_pack:
+		# One pack territory; members cluster together and hunt as a group.
+		var center := _find_spawn_point(data, 40.0)
+		for i in count:
+			_spawn_one(data, center + Vector2(_rng.randf_range(-16, 16), _rng.randf_range(-16, 16)))
+	else:
+		# Spread individuals far apart so the wilderness feels open and wild.
+		for i in count:
+			_spawn_one(data, _find_spawn_point(data, 55.0))
+
+
+## Find an XZ spawn: on land, beyond the player safe radius, and `separation`
+## away from other creatures. Returns the best candidate found.
+func _find_spawn_point(data: CreatureData, separation: float) -> Vector2:
+	var half := terrain.world_size * 0.5 - 18.0
+	var min_pd := _min_player_dist(data)
+	var fallback := Vector2(_rng.randf_range(-half, half), _rng.randf_range(-half, half))
+	for attempt in 48:
+		var v := Vector2(_rng.randf_range(-half, half), _rng.randf_range(-half, half))
+		if terrain.height_at(v.x, v.y) < _water_level + 0.6:
+			continue
+		if v.distance_to(player_start) < min_pd:
+			continue
+		fallback = v
+		var ok := true
+		for pl in _placed:
+			if v.distance_to(pl) < separation:
+				ok = false
+				break
+		if ok:
+			return v
+	return fallback
+
+
+func _spawn_one(data: CreatureData, pos2: Vector2) -> void:
+	var p := terrain.surface_point(pos2.x, pos2.y)
+	if p.y < _water_level + 0.4:
+		p.y = _water_level + 0.4
+	var c := CREATURE_SCENE.instantiate() as Creature
+	c.data = data
+	creatures_root.add_child(c)
+	c.global_position = p + Vector3.UP * 0.2
+	c.use_navigation_map(nav_map)  # route on the dome's dedicated map
+	_placed.append(pos2)
 
 
 ## Behavioral self-test: proves the slice is genuinely playable — geometry,
@@ -513,7 +617,7 @@ func _smoke_report() -> void:
 	var start_positions: Array[Vector3] = []
 	for c in creatures:
 		start_positions.append((c as Node3D).global_position)
-	await get_tree().create_timer(4.5).timeout
+	await get_tree().create_timer(8.0).timeout   # > max idle wait, big-map travel
 	var max_moved := 0.0
 	var movers := 0
 	for i in creatures.size():
@@ -522,7 +626,7 @@ func _smoke_report() -> void:
 		if d > 0.5:
 			movers += 1
 	results.append(["Creatures path the navmesh (%d/%d moved, max %.1fm)" % [
-		movers, creatures.size(), max_moved], movers > 0])
+		movers, creatures.size(), max_moved], movers >= creatures.size() / 2])
 
 	# --- Perception → HUNT: drop the player next to a predator ---
 	var raptor := _first_of_diet(creatures, CreatureData.Diet.CARNIVORE)

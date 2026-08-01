@@ -48,15 +48,17 @@ func _ready() -> void:
 		push_warning("Creature has no CreatureData assigned; using defaults.")
 		data = CreatureData.new()
 	_health = data.max_health
-	_home = global_position
-	_last_track_pos = global_position
 	perception.configure(data)
 	_build_visual()
-	# Defer initial navmesh sync so the region is ready on the first frame.
+	# Defer initial setup: the spawner sets our position AFTER add_child, so
+	# capture home/territory in _post_ready (else _home would be the origin and
+	# creatures would all wander toward the map center).
 	call_deferred("_post_ready")
 
 
 func _post_ready() -> void:
+	_home = global_position          # now correctly positioned by the spawner
+	_last_track_pos = global_position
 	health_changed.emit(_health, data.max_health)
 	_enter_state(State.IDLE)
 
@@ -278,15 +280,23 @@ func _steer_along_path(speed: float, delta: float) -> void:
 	# around trees/ruins), but fall back to steering straight at the goal when the
 	# navigation map has no usable path. Either way the creature keeps moving;
 	# CharacterBody3D collision makes it slide around obstacles in the fallback.
-	var goal := nav.target_position
-	var point := nav.get_next_path_position()
-	var have_nav_waypoint := global_position.distance_to(point) > 0.25
-	if not have_nav_waypoint and global_position.distance_to(goal) > 0.25:
-		point = goal  # navmesh unavailable — head directly for the goal
+	# Follow the navmesh path (it routes around trees/ruins) by heading for the
+	# first path point that is meaningfully ahead HORIZONTALLY. The navmesh sits
+	# below the agent's feet, so the nearest path points are "underfoot" (only a Y
+	# offset) — skipping them by horizontal distance avoids steering straight down
+	# and stalling. Falls back to the goal if the path has no usable waypoint.
+	var pos := global_position
+	var wp := nav.target_position
+	for p in nav.get_current_navigation_path():
+		var d := p - pos
+		d.y = 0.0
+		if d.length() > 1.5:
+			wp = p
+			break
 
-	var dir := (point - global_position)
+	var dir := wp - pos
 	dir.y = 0.0
-	if dir.length() < 0.15:
+	if dir.length() < 0.4:
 		velocity.x = move_toward(velocity.x, 0.0, speed)
 		velocity.z = move_toward(velocity.z, 0.0, speed)
 		return
@@ -319,7 +329,11 @@ func _spawn_track() -> void:
 	mat.albedo_color = Color(0.12, 0.09, 0.06, 0.75)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	fp.material_override = mat
-	get_parent().add_child(fp)
+	# Parent to the scene root, NOT the Creatures node (keeps that node creatures-only).
+	var host := get_tree().current_scene
+	if host == null:
+		host = get_parent()
+	host.add_child(fp)
 	fp.global_position = global_position + Vector3.UP * 0.04
 	fp.rotation = Vector3(-PI * 0.5, rotation.y, 0.0)
 	# Fade out and self-remove so tracks read as fresh vs. old.
@@ -334,7 +348,9 @@ func _face_toward(world_point: Vector3, delta: float) -> void:
 	to.y = 0.0
 	if to.length() < 0.05:
 		return
-	var desired := atan2(to.x, to.z)
+	# Rig forward is -Z, so aim -Z along `to` (atan2(-x,-z)), not +Z — otherwise
+	# the creature faces away from motion and appears to walk backwards.
+	var desired := atan2(-to.x, -to.z)
 	rotation.y = rotate_toward(rotation.y, desired, data.turn_speed * delta)
 
 
