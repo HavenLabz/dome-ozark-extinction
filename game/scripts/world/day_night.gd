@@ -5,11 +5,11 @@ class_name DayNightCycle
 ## dangerous after dark (North Star: preserve fear/vulnerability).
 
 @export var day_length_sec: float = 480.0     # full 24h cycle in real seconds
-@export_range(0.0, 1.0) var start_time: float = 0.30   # ~08:00, morning
+@export_range(0.0, 1.0) var start_time: float = 0.42   # mid-morning, bright
 @export var sun_path: NodePath = ^"../DirectionalLight3D"
 @export var env_path: NodePath = ^"../WorldEnvironment"
 
-var time_of_day: float = 0.30   # 0=midnight, .25=sunrise, .5=noon, .75=sunset
+var time_of_day: float = 0.42   # 0=midnight, .25=sunrise, .5=noon, .75=sunset
 
 @onready var _sun: DirectionalLight3D = get_node_or_null(sun_path)
 @onready var _we: WorldEnvironment = get_node_or_null(env_path)
@@ -47,13 +47,13 @@ func _apply() -> void:
 		# Arc the sun east→west and drop it below the horizon at night.
 		var azimuth := time_of_day * TAU
 		_sun.rotation = Vector3(deg_to_rad(-elev * 75.0 - 4.0), azimuth, 0.0)
-		_sun.light_energy = lerpf(0.04, 1.35, day)     # moonlight .. noon
+		_sun.light_energy = lerpf(0.06, 1.6, day)      # moonlight .. bright noon
 		_sun.light_color = _day_sun.lerp(_dusk_sun, horizon)
 		_sun.shadow_enabled = day > 0.02
 
 	if _we and _we.environment:
 		var env := _we.environment
-		env.ambient_light_energy = lerpf(0.12, 0.5, day)
+		env.ambient_light_energy = lerpf(0.14, 0.6, day)
 		env.ambient_light_color = Color(0.35, 0.42, 0.6).lerp(Color(0.6, 0.66, 0.66), day)
 		env.fog_density = lerpf(0.006, 0.0009, day)     # foggier at night
 		env.fog_light_color = Color(0.18, 0.22, 0.34).lerp(Color(0.7, 0.8, 0.92), day)

@@ -248,9 +248,10 @@ func _make_tree(base: Vector3, scale: float) -> StaticBody3D:
 ## Each tuft is a crossed pair of quads so it reads as grass from any angle.
 func _scatter_grass(blade_count: int = 45000) -> void:
 	var blade := _make_grass_tuft_mesh(0.28, 0.42)
-	var mat := _make_foliage_material(Color(0.18, 0.27, 0.10), Color(0.36, 0.48, 0.19))
+	var mat := _make_foliage_material(Color(0.24, 0.36, 0.13), Color(0.48, 0.66, 0.26))
 	mat.set_shader_parameter("height_ref", 0.42)
 	mat.set_shader_parameter("sway_strength", 0.06)
+	mat.set_shader_parameter("sky_lit", 1.0)   # skylit so grass reads lush, not black
 	blade.surface_set_material(0, mat)
 
 	var half := terrain.world_size * 0.5 - 4.0
