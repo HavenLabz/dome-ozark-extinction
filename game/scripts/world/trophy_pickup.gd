@@ -41,6 +41,7 @@ func interact() -> void:
 	_collected = true
 	GameState.collect_trophy(_trophy_id, int(round(_value * _bonus_mult)))
 	GameState.eat_food(_food)  # harvest meat
+	Sfx.play("chime", 1.0, -6.0)
 	queue_free()
 
 

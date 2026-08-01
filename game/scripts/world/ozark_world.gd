@@ -141,6 +141,7 @@ func _ready() -> void:
 	_build_cave(Vector2(95.0, -70.0))
 	_build_campfires()
 	_add_birds()
+	_scatter_caches()
 
 	# Let the freshly-created static colliders register with the physics server
 	# before we parse them into a navmesh (else the bake sees no geometry).
@@ -289,6 +290,49 @@ func _capture_screenshot() -> void:
 # ---------------------------------------------------------------------------
 # Forest
 # ---------------------------------------------------------------------------
+
+## Hidden supply caches tucked in the deep woods — find them all for the
+## legendary edge. Placed in dense cover, well away from the landing zone.
+func _scatter_caches() -> void:
+	var half := terrain.world_size * 0.5 - 12.0
+	var placed := 0
+	var attempts := 0
+	while placed < GameState.caches_total and attempts < 500:
+		attempts += 1
+		var x := _rng.randf_range(-half, half)
+		var z := _rng.randf_range(-half, half)
+		var p := terrain.surface_point(x, z)
+		if p.y < _water_level + 0.8:
+			continue
+		if _forest_density(x, z) < 0.55:
+			continue   # tucked in the trees
+		if Vector2(x, z).distance_to(player_start) < 45.0:
+			continue
+		_make_cache(p)
+		placed += 1
+
+
+func _make_cache(pos: Vector3) -> void:
+	var cache := Area3D.new()
+	cache.set_script(load("res://scripts/world/cache_pickup.gd"))
+	cache.position = pos + Vector3.UP * 0.35
+	var mesh := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.7, 0.5, 0.5)
+	mesh.mesh = bm
+	var mat := _solid_mat(Color(0.22, 0.2, 0.14))
+	mat.emission_enabled = true
+	mat.emission = Color(0.95, 0.78, 0.32)
+	mat.emission_energy_multiplier = 0.3
+	mesh.material_override = mat
+	cache.add_child(mesh)
+	var col := CollisionShape3D.new()
+	var sh := SphereShape3D.new()
+	sh.radius = 1.4
+	col.shape = sh
+	cache.add_child(col)
+	add_child(cache)
+
 
 ## Biome density at (x,z): 1 = dense forest, 0 = open glade/bald.
 func _forest_density(x: float, z: float) -> float:

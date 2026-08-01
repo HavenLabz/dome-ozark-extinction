@@ -122,6 +122,7 @@ func try_fire(ads: bool) -> bool:
 	_eject_casing()
 	var bloom := data.spread_per_shot * (data.ads_factor if ads else 1.0)
 	_spread = minf(data.spread_max, _spread + bloom)
+	Sfx.play("shot", 1.15 if data.body_style == "PISTOL" else 1.0, -2.0)
 	fired.emit()
 	return true
 
@@ -162,6 +163,7 @@ func reload() -> void:
 		return
 	_reloading = true
 	_reload_t = data.reload_time
+	Sfx.play("reload", 1.0, -8.0)
 	reload_started.emit(data.reload_time)
 
 
@@ -247,7 +249,8 @@ func _do_hitscan(ads: bool) -> void:
 		var collider: Object = hit.get("collider")
 		var on_creature := collider != null and collider.has_method("take_damage")
 		if on_creature:
-			var zone: String = collider.take_damage(data.damage, from, hit.get("position"))
+			var dmg := data.damage * (1.5 if GameState.legendary_unlocked else 1.0)
+			var zone: String = collider.take_damage(dmg, from, hit.get("position"))
 			if zone == "HEAD" or zone == "VITAL":
 				zone_hit.emit(zone)
 		_spawn_impact(hit.get("position"), hit.get("normal"), on_creature)

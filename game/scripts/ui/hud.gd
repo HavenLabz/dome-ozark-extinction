@@ -22,12 +22,18 @@ var _bound_weapon: Weapon
 func _ready() -> void:
 	_build()
 	_build_scope()
+	var radar = load("res://scripts/ui/minimap.gd").new()
+	add_child(radar)
 	# Live vitals.
 	GameState.health_changed.connect(func(_v): _refresh_stats())
 	GameState.stamina_changed.connect(func(_v): _refresh_stats())
 	GameState.hunger_changed.connect(func(_v): _refresh_stats())
 	GameState.hydration_changed.connect(func(_v): _refresh_stats())
 	GameState.trophy_collected.connect(func(_id, _val): _refresh_score())
+	GameState.cache_found.connect(func(_f, _t): _refresh_score())
+	GameState.legendary_found.connect(func():
+		_extract.text = "★ LEGENDARY EDGE UNLOCKED — your rounds hit harder."
+		get_tree().create_timer(5.0).timeout.connect(func(): _extract.text = ""))
 	_refresh_stats()
 	_refresh_score()
 	# Player-driven interaction prompt + extraction status.

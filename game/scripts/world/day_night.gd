@@ -42,6 +42,7 @@ func _sun_elevation() -> float:
 
 
 func _apply() -> void:
+	GameState.is_night = is_night()
 	var elev := _sun_elevation()
 	var day := clampf(elev, 0.0, 1.0)          # 0 night .. 1 noon
 	var horizon := clampf(1.0 - absf(elev) * 3.0, 0.0, 1.0)  # peaks at dawn/dusk

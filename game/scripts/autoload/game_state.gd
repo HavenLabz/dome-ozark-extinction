@@ -38,6 +38,8 @@ var is_extraction_available: bool = false
 ## Weather severity 0 (clear) .. 1 (full storm), set by WeatherManager each
 ## frame. Wildlife reads this to decide whether to shelter / hunker down.
 var storm_intensity: float = 0.0
+## Set by the day/night cycle. Predators grow bolder and sharper-sensed at night.
+var is_night: bool = false
 
 # --- Hunt loadout (chosen on the deployment screen, Carnivores-style) ---
 ## Weapon .tres paths the player deploys with. Empty = default loadout.
@@ -53,6 +55,26 @@ var last_result: Dictionary = {}
 ## The one supply drop per hunt (Carnivores-style) — refills ammo. Once used,
 ## no more until the next deployment.
 var supply_used: bool = false
+
+# --- Hidden caches → legendary edge ---
+var caches_total: int = 6
+var caches_found: int = 0
+## Once every cache is found, weapons hit harder for the rest of the run.
+var legendary_unlocked: bool = false
+
+signal cache_found(found: int, total: int)
+signal legendary_found
+
+
+## Recover a hidden cache: score + ammo, and the last one unlocks the legendary.
+func find_cache() -> void:
+	caches_found += 1
+	trophy_score += 100
+	cache_found.emit(caches_found, caches_total)
+	if caches_found >= caches_total and not legendary_unlocked:
+		legendary_unlocked = true
+		trophy_score += 500
+		legendary_found.emit()
 
 
 ## Purity multiplier from the currently-selected gear (−15% per aid).
@@ -122,3 +144,5 @@ func reset_session() -> void:
 	trophy_score = 0
 	is_extraction_available = false
 	supply_used = false
+	caches_found = 0
+	legendary_unlocked = false

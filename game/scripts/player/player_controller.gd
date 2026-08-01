@@ -63,6 +63,9 @@ var _recoil_yaw: float = 0.0
 
 
 var _flashlight: SpotLight3D
+var _step_t: float = 0.0
+var _blinds_built: int = 0
+var _rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
@@ -185,6 +188,56 @@ func _unhandled_input(event: InputEvent) -> void:
 			ex.begin_extraction(global_position)
 	elif event.is_action_pressed("supply_drop"):
 		_call_supply_drop()
+	elif event.is_action_pressed("build"):
+		_build_blind()
+
+
+## Place a hunting blind ahead of the player — three walls + roof, open toward
+## the way you're facing. Its walls block creatures' line of sight (they raycast
+## against world geometry), so it's real concealment for an ambush. Limit 3.
+func _build_blind() -> void:
+	if _blinds_built >= 3:
+		scan_info_changed.emit("Blind limit reached (3).")
+		get_tree().create_timer(2.0).timeout.connect(func(): scan_info_changed.emit(""))
+		return
+	_blinds_built += 1
+	var yaw: float = head.rotation.y
+	var fwd := Vector3(-sin(yaw), 0.0, -cos(yaw))
+	var base := global_position + fwd * 2.2
+	base.y = global_position.y - 0.9   # roughly ground at feet
+
+	var blind := StaticBody3D.new()
+	blind.collision_layer = 1
+	blind.collision_mask = 0
+	blind.position = base
+	blind.rotation.y = yaw
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.26, 0.22, 0.13)   # burlap / branches
+	mat.roughness = 0.95
+	# back + two sides + a low roof, open front (local -Z faces outward).
+	_blind_panel(blind, Vector3(1.8, 1.7, 0.12), Vector3(0, 0.85, 0.9), mat)   # back
+	_blind_panel(blind, Vector3(0.12, 1.7, 1.8), Vector3(-0.9, 0.85, 0), mat)  # left
+	_blind_panel(blind, Vector3(0.12, 1.7, 1.8), Vector3(0.9, 0.85, 0), mat)   # right
+	_blind_panel(blind, Vector3(1.8, 0.12, 1.9), Vector3(0, 1.7, 0), mat)      # roof
+	get_tree().current_scene.add_child(blind)
+	scan_info_changed.emit("Hunting blind built. (%d/3)" % _blinds_built)
+	get_tree().create_timer(2.0).timeout.connect(func(): scan_info_changed.emit(""))
+
+
+func _blind_panel(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
+	var mesh := MeshInstance3D.new()
+	var b := BoxMesh.new()
+	b.size = size
+	mesh.mesh = b
+	mesh.position = pos
+	mesh.material_override = mat
+	parent.add_child(mesh)
+	var col := CollisionShape3D.new()
+	var shape := BoxShape3D.new()
+	shape.size = size
+	col.shape = shape
+	col.position = pos
+	parent.add_child(col)
 
 
 ## The one supply drop per hunt (Carnivores-style): refills every weapon and
@@ -210,6 +263,19 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_update_interact_prompt()
 	_handle_weapons(delta)
+	_handle_footsteps(delta)
+
+
+func _handle_footsteps(delta: float) -> void:
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if not is_on_floor() or speed < 0.6 or _stance == Stance.PRONE:
+		_step_t = 0.15
+		return
+	_step_t -= delta
+	if _step_t <= 0.0:
+		# Faster cadence when moving faster; softer when crouched.
+		_step_t = clampf(3.2 / maxf(speed, 1.0), 0.28, 0.6)
+		Sfx.play("step", _rng.randf_range(0.9, 1.1), -20.0 if _stance == Stance.CROUCH else -14.0)
 
 
 func _apply_gravity(delta: float) -> void:

@@ -46,6 +46,7 @@ var _speed_mult: float = 1.0
 ## Score multiplier from the best shot placement landed on this animal
 ## (1.0 body, 1.25 vitals, 1.5 head) — applied to its trophy value on recovery.
 var _kill_bonus: float = 1.0
+var _call_t: float = 0.0            # ambient vocalization timer
 ## The ground speed the CURRENT gait animation is meant for. The model's leg
 ## cycle is scaled to actual speed against this, so feet track the ground
 ## (no foot-sliding). 0 = not a locomotion state (idle/attack), don't scale.
@@ -54,6 +55,7 @@ var _anim_ref_speed: float = 0.0
 
 func _ready() -> void:
 	_rng.randomize()
+	add_to_group("wildlife")   # so the motion-tracker radar can ping us
 	if data == null:
 		push_warning("Creature has no CreatureData assigned; using defaults.")
 		data = CreatureData.new()
@@ -70,6 +72,7 @@ func _post_ready() -> void:
 	_home = global_position          # now correctly positioned by the spawner
 	_last_track_pos = global_position
 	_speed_mult = _rng.randf_range(0.86, 1.14)
+	_call_t = _rng.randf_range(2.0, 16.0)   # stagger so the dome isn't a chorus
 	health_changed.emit(_health, data.max_health)
 	_enter_state(State.IDLE)
 
@@ -102,6 +105,21 @@ func _physics_process(delta: float) -> void:
 		_sync_gait(ground_speed)
 
 	_maybe_drop_track(delta)
+	_maybe_call(delta)
+
+
+## Occasional positional vocalization — herbivores chirp, predators roar (pitch
+## scales down with size, so a T-Rex is a deep bellow and a raptor a screech).
+func _maybe_call(delta: float) -> void:
+	_call_t -= delta
+	if _call_t > 0.0:
+		return
+	# Predators call more when hunting; everyone is quieter at rest.
+	var hunting := _state == State.HUNT or _state == State.ATTACK
+	_call_t = _rng.randf_range(4.0, 9.0) if hunting else _rng.randf_range(9.0, 20.0)
+	var name := "chirp" if data.diet == CreatureData.Diet.HERBIVORE else "roar"
+	var pitch := clampf(2.2 / maxf(data.body_size.y, 0.5), 0.45, 1.8)
+	Sfx.play_at(name, global_position + Vector3.UP * data.body_size.y * 0.6, pitch, 6.0)
 
 
 ## Match the model's leg-cycle playback to how fast it's actually moving so the
@@ -121,6 +139,11 @@ func _sense_target() -> void:
 	var player := _find_player()
 	if player == null:
 		return
+	# Nocturnal predators: sharper senses at night and in storms.
+	var predator := data.diet != CreatureData.Diet.HERBIVORE
+	var boost := 1.5 if predator and (GameState.is_night or GameState.storm_intensity > 0.5) else 1.0
+	perception.sight_range = data.sight_range * boost
+	perception.hearing_range = data.hearing_range * boost
 	var loud := _is_player_loud(player)
 	var facing := -global_transform.basis.z
 	if perception.can_see(player, facing) or perception.can_hear(player, loud):
@@ -140,9 +163,11 @@ func _react_to_sensed_target() -> void:
 			if _state != State.FLEE:
 				_change_state(State.FLEE)
 	else:
-		# Predators/omnivores close in.
+		# Predators/omnivores close in — and commit straight to the hunt after
+		# dark or in a storm, when they're emboldened.
 		if _state in [State.IDLE, State.WANDER]:
-			_change_state(State.HUNT if data.is_aggressive else State.INVESTIGATE)
+			var bold := data.is_aggressive or GameState.is_night or GameState.storm_intensity > 0.5
+			_change_state(State.HUNT if bold else State.INVESTIGATE)
 
 
 func _is_player_loud(player: Node) -> bool:
@@ -296,6 +321,8 @@ func _die() -> void:
 	elif _rig:
 		_rig.rotation_degrees.z = 90.0 # procedural rig just topples over
 		_rig.position.y = 0.4
+	var pitch := clampf(2.2 / maxf(data.body_size.y, 0.5), 0.45, 1.8) * 0.8   # pained, lower
+	Sfx.play_at("chirp" if data.diet == CreatureData.Diet.HERBIVORE else "roar", global_position + Vector3.UP, pitch, 5.0)
 	_spawn_trophy()
 	died.emit(self)
 

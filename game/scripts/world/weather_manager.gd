@@ -204,6 +204,7 @@ func _tick_lightning(delta: float) -> void:
 	if _thunder_timer <= 0.0:
 		_thunder_timer = _rng.randf_range(3.0, 9.0)
 		_flash = _rng.randf_range(0.6, 1.0)   # a strike
+		Sfx.play("thunder", _rng.randf_range(0.85, 1.1), -4.0)
 
 
 # --- tornado -----------------------------------------------------------------
