@@ -89,10 +89,16 @@ func _capture_screenshot() -> void:
 	cam.fov = 68.0
 	var creatures := creatures_root.get_children()
 	if "--shotcreature" in args and creatures.size() > 0:
-		# Close-up on a creature to judge the rig.
-		var cr := creatures[0] as Node3D
-		var tp := cr.global_position + Vector3.UP * 1.0
-		cam.global_position = tp + Vector3(3.5, 1.2, 4.0)
+		# Full-body portrait, framed by the creature's size. Optional index arg.
+		var ci := 0
+		var ai := args.find("--shotcreature")
+		if ai + 1 < args.size() and args[ai + 1].is_valid_int():
+			ci = clampi(int(args[ai + 1]), 0, creatures.size() - 1)
+		var cr := creatures[ci] as Creature
+		var h: float = cr.data.body_size.y
+		var dist := maxf(7.0, h * 2.4)
+		var tp := cr.global_position + Vector3.UP * (h * 0.45)
+		cam.global_position = cr.global_position + Vector3(dist * 0.7, h * 0.7, dist * 0.75)
 		cam.look_at(tp, Vector3.UP)
 	elif "--shotground" in args:
 		# Player's-eye view — the real in-game experience.
@@ -403,24 +409,37 @@ func _place_player() -> void:
 	player.global_position = p + Vector3.UP * 0.2
 
 
+## The dome's ecosystem — grazers + predators + apex. Add a line to grow it.
+const ROSTER := [
+	["res://data/creatures/brachiosaurus.tres", 3],
+	["res://data/creatures/gallimimus.tres", 6],
+	["res://data/creatures/triceratops.tres", 3],
+	["res://data/creatures/velociraptor.tres", 4],
+	["res://data/creatures/allosaurus.tres", 2],
+	["res://data/creatures/spinosaurus.tres", 1],
+	["res://data/creatures/tyrannosaurus.tres", 1],
+]
+
 func _spawn_wildlife() -> void:
-	_spawn_species(grazer_data, grazer_count)
-	_spawn_species(raptor_data, raptor_count)
+	for entry in ROSTER:
+		_spawn_species(load(entry[0]), entry[1])
 
 
 func _spawn_species(data: CreatureData, count: int) -> void:
 	if data == null:
 		return
 	var half := terrain.world_size * 0.5 - 10.0
+	# Apex predators start well away so the player isn't mauled at spawn.
+	var min_dist := 60.0 if data.is_apex else 18.0
 	for i in count:
 		var placed := false
-		for attempt in 12:
+		for attempt in 16:
 			var x := _rng.randf_range(-half, half)
 			var z := _rng.randf_range(-half, half)
 			var p := terrain.surface_point(x, z)
 			if p.y < _water_level + 0.5:
 				continue
-			if Vector2(x, z).distance_to(player_start) < 18.0:
+			if Vector2(x, z).distance_to(player_start) < min_dist:
 				continue
 			var c := CREATURE_SCENE.instantiate() as Creature
 			c.data = data

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"spinosaurus"
+display_name = "Spinosaurus"
+diet = 1
+archetype = 1
+rarity = 5
+is_apex = true
+max_health = 520.0
+mass_kg = 7000.0
+walk_speed = 2.6
+run_speed = 9.5
+turn_speed = 6.0
+sight_range = 60.0
+sight_fov_deg = 210.0
+hearing_range = 34.0
+flee_distance = 0.0
+alert_memory = 12.0
+territory_radius = 110.0
+is_aggressive = true
+attack_range = 3.4
+attack_damage = 55.0
+attack_cooldown = 1.4
+trophy_id = &"spinosaurus_trophy"
+trophy_value = 800
+body_size = Vector3(1.6, 3.9, 8.0)
+placeholder_color = Color(0.3, 0.34, 0.4, 1)

@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"tyrannosaurus"
+display_name = "Tyrannosaurus Rex"
+diet = 1
+archetype = 1
+rarity = 5
+is_apex = true
+max_health = 750.0
+mass_kg = 8000.0
+walk_speed = 2.8
+run_speed = 11.0
+turn_speed = 6.0
+sight_range = 70.0
+sight_fov_deg = 220.0
+hearing_range = 40.0
+flee_distance = 0.0
+alert_memory = 14.0
+territory_radius = 130.0
+is_aggressive = true
+attack_range = 3.8
+attack_damage = 70.0
+attack_cooldown = 1.5
+trophy_id = &"trex_trophy"
+trophy_value = 1200
+body_size = Vector3(1.9, 4.6, 8.6)
+placeholder_color = Color(0.34, 0.3, 0.26, 1)

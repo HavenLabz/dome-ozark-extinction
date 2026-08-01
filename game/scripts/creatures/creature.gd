@@ -37,6 +37,7 @@ var _idle_wait: float = 0.0
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _rng := RandomNumberGenerator.new()
 var _rig: CreatureRig
+var _model: Node3D          # set instead of _rig when data.model_scene is used
 
 
 func _ready() -> void:
@@ -245,9 +246,10 @@ func _die() -> void:
 	# Drop from the physics/creature layers so it no longer blocks or is chased.
 	set_deferred("collision_layer", 0)
 	set_deferred("collision_mask", 0)
-	if _rig:
-		_rig.rotation_degrees.z = 90.0  # topple over (crude until death anim)
-		_rig.position.y = 0.4
+	var vis: Node3D = _rig if _rig else _model
+	if vis:
+		vis.rotation_degrees.z = 90.0  # topple over (crude until death anim)
+		vis.position.y = 0.4
 	_spawn_trophy()
 	died.emit(self)
 
@@ -352,6 +354,14 @@ func _exit_state(_old_state: State) -> void:
 func _build_visual() -> void:
 	if body_mesh:
 		body_mesh.visible = false  # hide the old debug box
+	# Drop-in seam: if a real model scene is assigned, use it instead of the rig.
+	if data.model_scene != null:
+		_model = data.model_scene.instantiate()
+		add_child(_model)
+		var ap := _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		if ap and ap.get_animation_list().size() > 0:
+			ap.play(ap.get_animation_list()[0])  # idle/first clip
+		return
 	_rig = CreatureRig.new()
 	add_child(_rig)
 	_rig.build(data)

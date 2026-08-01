@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"allosaurus"
+display_name = "Allosaurus"
+diet = 1
+archetype = 1
+rarity = 4
+is_apex = false
+max_health = 240.0
+mass_kg = 2000.0
+walk_speed = 2.8
+run_speed = 10.0
+turn_speed = 7.0
+sight_range = 55.0
+sight_fov_deg = 200.0
+hearing_range = 30.0
+flee_distance = 6.0
+alert_memory = 10.0
+territory_radius = 90.0
+is_aggressive = true
+attack_range = 3.0
+attack_damage = 38.0
+attack_cooldown = 1.3
+trophy_id = &"allosaurus_trophy"
+trophy_value = 550
+body_size = Vector3(1.2, 2.7, 5.2)
+placeholder_color = Color(0.46, 0.3, 0.24, 1)

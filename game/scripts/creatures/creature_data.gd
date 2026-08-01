@@ -8,13 +8,23 @@ class_name CreatureData
 ## New creatures = new `.tres` files under `res://data/creatures/`.
 
 enum Diet { HERBIVORE, CARNIVORE, OMNIVORE }
+## Body silhouette for the procedural rig (until real models are assigned).
+enum Archetype { SAUROPOD, THEROPOD, CERATOPSIAN, ORNITHOMIMID }
 
 @export_group("Identity")
 @export var species_id: StringName = &"unknown"
 @export var display_name: String = "Unknown Creature"
 @export var diet: Diet = Diet.HERBIVORE
+@export var archetype: Archetype = Archetype.SAUROPOD
 ## Rarity 1 (common) .. 5 (legendary). Drives spawn weighting + trophy prestige.
 @export_range(1, 5) var rarity: int = 1
+## Apex predators never flee and roam a large territory (e.g. T-Rex).
+@export var is_apex: bool = false
+
+## OPTIONAL: a real animated model scene (e.g. an imported Quaternius CC0 dino).
+## If set, the creature instances THIS instead of the procedural rig — the
+## drop-in seam for sculpted models. Leave null to use the procedural rig.
+@export var model_scene: PackedScene
 
 @export_group("Vitals")
 @export var max_health: float = 100.0

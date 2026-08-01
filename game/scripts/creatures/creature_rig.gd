@@ -19,13 +19,19 @@ var _base_y := 0.0
 
 
 func build(data: CreatureData) -> void:
-	_biped = data.diet == CreatureData.Diet.CARNIVORE
 	var skin := _mat(data.placeholder_color)
 	var belly := _mat(data.placeholder_color.lightened(0.22))
-	if _biped:
-		_build_theropod(data, skin, belly)
-	else:
-		_build_sauropod(data, skin, belly)
+	match data.archetype:
+		CreatureData.Archetype.THEROPOD:
+			_biped = true
+			_build_theropod(data, skin, belly)
+		CreatureData.Archetype.CERATOPSIAN:
+			_build_ceratopsian(data, skin, belly)
+		CreatureData.Archetype.ORNITHOMIMID:
+			_biped = true
+			_build_ornithomimid(data, skin, belly)
+		_:
+			_build_sauropod(data, skin, belly)
 
 
 func animate(speed: float, delta: float) -> void:
@@ -117,6 +123,70 @@ func _build_theropod(data: CreatureData, skin: Material, belly: Material) -> voi
 	# Two powerful legs.
 	_add_leg(Vector3(w * 0.42, hip, ln * 0.05), hip, w * 0.28, skin, 0.0)
 	_add_leg(Vector3(-w * 0.42, hip, ln * 0.05), hip, w * 0.28, skin, PI)
+
+
+func _build_ceratopsian(data: CreatureData, skin: Material, belly: Material) -> void:
+	var s := data.body_size
+	var w := s.x
+	var hgt := s.y
+	var ln := s.z
+	var hip := hgt * 0.6
+	_base_y = hip * 1.05
+
+	_body = _ellipsoid(Vector3(w * 1.15, hgt * 0.85, ln * 0.95), Vector3(0, _base_y, 0), skin)
+	_ellipsoid(Vector3(w * 1.0, hgt * 0.5, ln * 0.75), Vector3(0, _base_y - hgt * 0.18, 0), belly)
+
+	# Big head + bony frill + horns up front (-Z).
+	var head_pos := Vector3(0, _base_y + hgt * 0.05, -ln * 0.6)
+	_head = _ellipsoid(Vector3(w * 0.7, hgt * 0.55, ln * 0.4), head_pos, skin)
+	_head_base_y = head_pos.y
+	# Frill: a big flattened plate behind the head.
+	var frill := _ellipsoid(Vector3(w * 1.25, hgt * 0.75, ln * 0.12),
+		head_pos + Vector3(0, hgt * 0.2, ln * 0.12), belly)
+	frill.rotation_degrees.x = -20.0
+	# Two brow horns + a nose horn.
+	_cyl(0.07 * w, hgt * 0.7, head_pos + Vector3(w * 0.22, hgt * 0.25, -ln * 0.1),
+		Vector3(-20, 0, 0), skin)
+	_cyl(0.07 * w, hgt * 0.7, head_pos + Vector3(-w * 0.22, hgt * 0.25, -ln * 0.1),
+		Vector3(-20, 0, 0), skin)
+	_cyl(0.05 * w, hgt * 0.35, head_pos + Vector3(0, hgt * 0.05, -ln * 0.28),
+		Vector3(-55, 0, 0), skin)
+
+	_build_tail(Vector3(0, _base_y, ln * 0.45), ln * 0.7, hgt, w, skin, 3, 0.25)
+
+	# Four sturdy legs.
+	_add_leg(Vector3(w * 0.6, hip, -ln * 0.25), hip, w * 0.24, skin, 0.0)
+	_add_leg(Vector3(-w * 0.6, hip, -ln * 0.25), hip, w * 0.24, skin, PI)
+	_add_leg(Vector3(w * 0.6, hip, ln * 0.3), hip, w * 0.24, skin, PI)
+	_add_leg(Vector3(-w * 0.6, hip, ln * 0.3), hip, w * 0.24, skin, 0.0)
+
+
+func _build_ornithomimid(data: CreatureData, skin: Material, belly: Material) -> void:
+	# Slender ostrich-like biped (e.g. Gallimimus) — fast, skittish grazer.
+	var s := data.body_size
+	var w := s.x
+	var hgt := s.y
+	var ln := s.z
+	var hip := hgt * 0.7
+	_base_y = hip * 1.02
+
+	_body = _ellipsoid(Vector3(w * 0.8, hgt * 0.55, ln * 0.95), Vector3(0, _base_y, 0), skin)
+	_body.rotation.x = deg_to_rad(-6.0)
+
+	# Long slim neck + small head (-Z, up).
+	var neck_pos := Vector3(0, _base_y + hgt * 0.3, -ln * 0.42)
+	for i in 2:
+		var f := i / 2.0
+		_cyl(0.1 * w, hgt * 0.45, neck_pos + Vector3(0, hgt * 0.3 * f, -ln * 0.12 * f),
+			Vector3(-40, 0, 0), skin)
+	var head_pos := neck_pos + Vector3(0, hgt * 0.55, -ln * 0.18)
+	_head = _ellipsoid(Vector3(w * 0.28, hgt * 0.2, ln * 0.3), head_pos, skin)
+	_head_base_y = head_pos.y
+
+	_build_tail(Vector3(0, _base_y + hgt * 0.05, ln * 0.5), ln * 1.1, hgt, w * 0.8, skin, 4, 0.03)
+
+	_add_leg(Vector3(w * 0.28, hip, ln * 0.05), hip, w * 0.14, skin, 0.0)
+	_add_leg(Vector3(-w * 0.28, hip, ln * 0.05), hip, w * 0.14, skin, PI)
 
 
 func _build_tail(root: Vector3, ln: float, hgt: float, w: float,

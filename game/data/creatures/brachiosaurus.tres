@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"brachiosaurus"
+display_name = "Brachiosaurus"
+diet = 0
+archetype = 0
+rarity = 3
+is_apex = false
+max_health = 420.0
+mass_kg = 35000.0
+walk_speed = 1.8
+run_speed = 5.5
+turn_speed = 3.0
+sight_range = 45.0
+sight_fov_deg = 250.0
+hearing_range = 30.0
+flee_distance = 22.0
+alert_memory = 7.0
+territory_radius = 55.0
+is_aggressive = false
+attack_range = 3.0
+attack_damage = 20.0
+attack_cooldown = 2.0
+trophy_id = &"brachiosaurus_trophy"
+trophy_value = 300
+body_size = Vector3(2.2, 5.4, 8.0)
+placeholder_color = Color(0.44, 0.46, 0.34, 1)

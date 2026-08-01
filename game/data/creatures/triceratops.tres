@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"triceratops"
+display_name = "Triceratops"
+diet = 0
+archetype = 2
+rarity = 3
+is_apex = false
+max_health = 360.0
+mass_kg = 9000.0
+walk_speed = 2.2
+run_speed = 8.5
+turn_speed = 5.0
+sight_range = 40.0
+sight_fov_deg = 240.0
+hearing_range = 28.0
+flee_distance = 16.0
+alert_memory = 8.0
+territory_radius = 50.0
+is_aggressive = false
+attack_range = 3.2
+attack_damage = 45.0
+attack_cooldown = 1.8
+trophy_id = &"triceratops_trophy"
+trophy_value = 320
+body_size = Vector3(2.0, 2.5, 5.6)
+placeholder_color = Color(0.5, 0.42, 0.36, 1)
