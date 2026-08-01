@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"wild_turkey"
+display_name = "Wild Turkey"
+diet = 0
+archetype = 3
+rarity = 1
+is_apex = false
+max_health = 30.0
+mass_kg = 8.0
+walk_speed = 2.8
+run_speed = 9.0
+turn_speed = 10.0
+sight_range = 42.0
+sight_fov_deg = 320.0
+hearing_range = 30.0
+flee_distance = 28.0
+alert_memory = 6.0
+territory_radius = 45.0
+is_aggressive = false
+attack_range = 1.2
+attack_damage = 2.0
+attack_cooldown = 1.5
+trophy_id = &"turkey_trophy"
+trophy_value = 70
+body_size = Vector3(0.4, 0.9, 0.8)
+placeholder_color = Color(0.24, 0.17, 0.11, 1)

@@ -576,8 +576,13 @@ func _place_player() -> void:
 ## [path, count, is_pack]. Herbivores/lone predators spread across the valley;
 ## raptors spawn as one coordinated pack (intelligent group hunters).
 const ROSTER := [
+	# Real modern Ozark fauna — the base ecosystem the dinosaurs are layered onto.
+	["res://data/creatures/whitetail_deer.tres", 6, false],
+	["res://data/creatures/wild_turkey.tres", 4, false],
+	["res://data/creatures/black_bear.tres", 2, false],
+	# Resurrected prehistoric creatures, sharing the same wilderness.
 	["res://data/creatures/brachiosaurus.tres", 3, false],
-	["res://data/creatures/gallimimus.tres", 5, false],
+	["res://data/creatures/gallimimus.tres", 4, false],
 	["res://data/creatures/triceratops.tres", 3, false],
 	["res://data/creatures/velociraptor.tres", 5, true],   # pack hunters
 	["res://data/creatures/allosaurus.tres", 2, false],

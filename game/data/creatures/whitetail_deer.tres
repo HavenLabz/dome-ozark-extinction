@@ -1,0 +1,31 @@
+[gd_resource type="Resource" script_class="CreatureData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/creatures/creature_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+species_id = &"whitetail_deer"
+display_name = "White-tailed Deer"
+diet = 0
+archetype = 4
+rarity = 1
+is_apex = false
+max_health = 80.0
+mass_kg = 90.0
+walk_speed = 2.6
+run_speed = 12.5
+turn_speed = 9.0
+sight_range = 45.0
+sight_fov_deg = 300.0
+hearing_range = 34.0
+flee_distance = 30.0
+alert_memory = 8.0
+territory_radius = 60.0
+is_aggressive = false
+attack_range = 1.8
+attack_damage = 6.0
+attack_cooldown = 1.5
+trophy_id = &"deer_trophy"
+trophy_value = 120
+body_size = Vector3(0.7, 1.5, 1.9)
+placeholder_color = Color(0.55, 0.42, 0.28, 1)

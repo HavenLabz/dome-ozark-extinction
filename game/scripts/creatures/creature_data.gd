@@ -9,7 +9,8 @@ class_name CreatureData
 
 enum Diet { HERBIVORE, CARNIVORE, OMNIVORE }
 ## Body silhouette for the procedural rig (until real models are assigned).
-enum Archetype { SAUROPOD, THEROPOD, CERATOPSIAN, ORNITHOMIMID }
+## QUADRUPED covers modern Ozark mammals (deer, bear, fox).
+enum Archetype { SAUROPOD, THEROPOD, CERATOPSIAN, ORNITHOMIMID, QUADRUPED }
 
 @export_group("Identity")
 @export var species_id: StringName = &"unknown"

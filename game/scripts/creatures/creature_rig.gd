@@ -30,6 +30,8 @@ func build(data: CreatureData) -> void:
 		CreatureData.Archetype.ORNITHOMIMID:
 			_biped = true
 			_build_ornithomimid(data, skin, belly)
+		CreatureData.Archetype.QUADRUPED:
+			_build_quadruped(data, skin, belly)
 		_:
 			_build_sauropod(data, skin, belly)
 
@@ -187,6 +189,36 @@ func _build_ornithomimid(data: CreatureData, skin: Material, belly: Material) ->
 
 	_add_leg(Vector3(w * 0.28, hip, ln * 0.05), hip, w * 0.14, skin, 0.0)
 	_add_leg(Vector3(-w * 0.28, hip, ln * 0.05), hip, w * 0.14, skin, PI)
+
+
+## Modern Ozark mammal (white-tailed deer, black bear, fox) — the real base
+## fauna the resurrected dinosaurs share the valley with.
+func _build_quadruped(data: CreatureData, skin: Material, belly: Material) -> void:
+	var s := data.body_size
+	var w := s.x
+	var hgt := s.y
+	var ln := s.z
+	var hip := hgt * 0.55
+	_base_y = hip * 1.05
+
+	_body = _ellipsoid(Vector3(w * 1.0, hgt * 0.72, ln * 0.95), Vector3(0, _base_y, 0), skin)
+	_ellipsoid(Vector3(w * 0.9, hgt * 0.45, ln * 0.7), Vector3(0, _base_y - hgt * 0.12, 0), belly)
+
+	# Short neck + head at the front (-Z), angled up.
+	var neck_pos := Vector3(0, _base_y + hgt * 0.12, -ln * 0.44)
+	_cyl(0.16 * w, hgt * 0.42, neck_pos, Vector3(-55, 0, 0), skin)
+	var head_pos := neck_pos + Vector3(0, hgt * 0.24, -ln * 0.14)
+	_head = _ellipsoid(Vector3(w * 0.42, hgt * 0.34, ln * 0.34), head_pos, skin)
+	_head_base_y = head_pos.y
+	_box(Vector3(w * 0.22, hgt * 0.14, ln * 0.2),
+		head_pos + Vector3(0, -hgt * 0.02, -ln * 0.16), skin)  # snout
+
+	_build_tail(Vector3(0, _base_y, ln * 0.46), ln * 0.4, hgt, w * 0.7, skin, 2, 0.25)
+
+	_add_leg(Vector3(w * 0.42, hip, -ln * 0.3), hip, w * 0.13, skin, 0.0)
+	_add_leg(Vector3(-w * 0.42, hip, -ln * 0.3), hip, w * 0.13, skin, PI)
+	_add_leg(Vector3(w * 0.42, hip, ln * 0.32), hip, w * 0.13, skin, PI)
+	_add_leg(Vector3(-w * 0.42, hip, ln * 0.32), hip, w * 0.13, skin, 0.0)
 
 
 func _build_tail(root: Vector3, ln: float, hgt: float, w: float,
