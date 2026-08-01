@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## First-person player controller — Phase 1 foundation.
+## First-person player controller — movement, survival hooks, weapons.
 ## Expandable for injuries, equipment, vehicles, multiplayer later.
 
 @export var walk_speed: float = 4.5
@@ -10,21 +10,26 @@ extends CharacterBody3D
 @export var stamina_drain_sprint: float = 12.0
 @export var stamina_regen: float = 18.0
 
-@export_group("Interaction / Weapon (seed)")
+@export_group("Interaction")
 ## Reach of the "look at it and press E" interaction ray.
 @export var interact_range: float = 3.0
-## First hitscan tool. This is the seed the real weapon system extends —
-## not a placeholder that fakes a feature (North Star Hard Rule #2).
-@export var weapon_range: float = 250.0
-@export var weapon_damage: float = 40.0
 
-## Emitted when the interaction ray gains/loses a valid target, so a HUD can
-## show a context prompt. Passes an empty string when nothing is targeted.
+@export_group("Weapons")
+@export var weapon_loadout: Array[WeaponData] = []
+@export var default_fov: float = 75.0
+@export var ads_fov: float = 50.0
+
+## Emitted when the interaction ray gains/loses a valid target (HUD prompt).
 signal interact_prompt_changed(text: String)
+## Emitted when the active weapon changes (HUD binds to the new weapon).
+signal weapon_changed(weapon: Weapon)
 
 @onready var head: Node3D = $Head
 @onready var camera: Camera3D = $Head/Camera3D
 @onready var collision_shape: CollisionShape3D = $CollisionShape3D
+
+const _MASK_INTERACTABLES := 16
+const WEAPON_SCENE := preload("res://scripts/weapons/weapon.gd")
 
 var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _is_crouching: bool = false
@@ -33,15 +38,34 @@ var _standing_height: float = 1.8
 var _crouch_height: float = 1.0
 var _current_prompt: String = ""
 
-# Physics-layer masks (see project.godot [layer_names]).
-const _MASK_WORLD := 1
-const _MASK_CREATURES := 4
-const _MASK_INTERACTABLES := 16
+var _weapons: Array[Weapon] = []
+var _weapon_idx: int = -1
+var _ads: bool = false
+var _recoil_pitch: float = 0.0   # accumulated, recovered each frame
+var _recoil_yaw: float = 0.0
 
 
 func _ready() -> void:
 	add_to_group("player")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	camera.fov = default_fov
+	_build_weapons()
+
+
+func _build_weapons() -> void:
+	if weapon_loadout.is_empty():
+		weapon_loadout = [
+			load("res://data/weapons/ar15.tres"),
+			load("res://data/weapons/m1911.tres"),
+		]
+	for wd in weapon_loadout:
+		var w := WEAPON_SCENE.new() as Weapon
+		w.data = wd
+		w.visible = false
+		camera.add_child(w)
+		_weapons.append(w)
+	if not _weapons.is_empty():
+		_switch_weapon(0)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -58,10 +82,16 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		return
-	if event.is_action_pressed("fire"):
-		_fire()
-	elif event.is_action_pressed("interact"):
+	if event.is_action_pressed("interact"):
 		_try_interact()
+	elif event.is_action_pressed("reload"):
+		var w := _current_weapon()
+		if w:
+			w.reload()
+	elif event.is_action_pressed("weapon_1"):
+		_switch_weapon(0)
+	elif event.is_action_pressed("weapon_2"):
+		_switch_weapon(1)
 
 
 func _physics_process(delta: float) -> void:
@@ -71,6 +101,7 @@ func _physics_process(delta: float) -> void:
 	_regen_stamina(delta)
 	move_and_slide()
 	_update_interact_prompt()
+	_handle_weapons(delta)
 
 
 func _apply_gravity(delta: float) -> void:
@@ -131,17 +162,72 @@ func apply_damage(amount: float) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Hitscan weapon (seed) + interaction
+# Weapons
 # ---------------------------------------------------------------------------
 
-func _fire() -> void:
-	var hit := _cast_from_camera(weapon_range, _MASK_WORLD | _MASK_CREATURES)
-	if hit.is_empty():
-		return
-	var collider: Object = hit.get("collider")
-	if collider != null and collider.has_method("take_damage"):
-		collider.take_damage(weapon_damage, global_position)
+func _current_weapon() -> Weapon:
+	return _weapons[_weapon_idx] if _weapon_idx >= 0 else null
 
+
+## Public accessor (HUD / tests).
+func get_active_weapon() -> Weapon:
+	return _current_weapon()
+
+
+func _switch_weapon(idx: int) -> void:
+	if idx < 0 or idx >= _weapons.size() or idx == _weapon_idx:
+		return
+	if _current_weapon():
+		_current_weapon().visible = false
+	_weapon_idx = idx
+	var w := _current_weapon()
+	w.visible = true
+	weapon_changed.emit(w)
+
+
+func _handle_weapons(delta: float) -> void:
+	# Aim-down-sights.
+	_ads = Input.is_action_pressed("aim") and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	camera.fov = lerpf(camera.fov, ads_fov if _ads else default_fov, clampf(delta * 12.0, 0.0, 1.0))
+
+	var w := _current_weapon()
+	if w != null and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		var wants_fire := false
+		if w.data.fire_mode == WeaponData.FireMode.AUTO:
+			wants_fire = Input.is_action_pressed("fire")
+		else:
+			wants_fire = Input.is_action_just_pressed("fire")
+		if wants_fire and w.try_fire(_ads):
+			_add_recoil(w.data)
+
+	_recover_recoil(delta)
+
+
+func _add_recoil(wd: WeaponData) -> void:
+	var f := wd.ads_factor if _ads else 1.0
+	var kp := wd.recoil_pitch * f
+	var ky := wd.recoil_yaw * f * (1.0 if randf() > 0.5 else -1.0)
+	camera.rotation.x = clampf(camera.rotation.x + kp, deg_to_rad(-89.0), deg_to_rad(89.0))
+	head.rotation.y += ky
+	_recoil_pitch += kp
+	_recoil_yaw += ky
+
+
+func _recover_recoil(delta: float) -> void:
+	if is_zero_approx(_recoil_pitch) and is_zero_approx(_recoil_yaw):
+		return
+	var rate := 8.0 * delta
+	var rp := _recoil_pitch * clampf(rate, 0.0, 1.0)
+	var ry := _recoil_yaw * clampf(rate, 0.0, 1.0)
+	camera.rotation.x -= rp
+	head.rotation.y -= ry
+	_recoil_pitch -= rp
+	_recoil_yaw -= ry
+
+
+# ---------------------------------------------------------------------------
+# Interaction
+# ---------------------------------------------------------------------------
 
 func _try_interact() -> void:
 	var hit := _cast_from_camera(interact_range, _MASK_INTERACTABLES)

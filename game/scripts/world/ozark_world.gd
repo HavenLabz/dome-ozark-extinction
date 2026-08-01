@@ -75,6 +75,15 @@ func _capture_screenshot() -> void:
 	var idx := args.find("--shot")
 	var path := args[idx + 1] if idx + 1 < args.size() else "user://dome_shot.png"
 	# Elevated vantage looking across terrain, water, and forest.
+	# Weapon shot: use the player's own camera (which holds the viewmodel).
+	if "--shotweapon" in args:
+		await get_tree().create_timer(2.5).timeout
+		var img_w := get_viewport().get_texture().get_image()
+		img_w.save_png(path)
+		print("[shot] saved %s (%dx%d)" % [path, img_w.get_width(), img_w.get_height()])
+		get_tree().quit()
+		return
+
 	var cam := Camera3D.new()
 	add_child(cam)
 	cam.fov = 68.0
@@ -489,6 +498,18 @@ func _smoke_report() -> void:
 			trophy.interact()
 			results.append(["Recovering trophy scores (%d)" % GameState.trophy_score,
 				GameState.trophy_score > before])
+
+	# --- Weapon: fire consumes ammo; reload refills ---
+	if player and player.has_method("get_active_weapon"):
+		var wpn = player.get_active_weapon()
+		if wpn:
+			var a0: Vector2i = wpn.get_ammo()
+			wpn.try_fire(false)
+			await get_tree().physics_frame
+			var a1: Vector2i = wpn.get_ammo()
+			results.append(["Weapon fires + consumes ammo (%d→%d)" % [a0.x, a1.x], a1.x == a0.x - 1])
+		else:
+			results.append(["Weapon equipped", false])
 
 	# --- Report ---
 	print("\n===== OZARK BEHAVIORAL SMOKE TEST =====")

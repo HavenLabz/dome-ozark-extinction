@@ -7,6 +7,8 @@ class_name HUD
 var _stats: Label
 var _prompt: Label
 var _score: Label
+var _ammo: Label
+var _bound_weapon: Weapon
 
 
 func _ready() -> void:
@@ -25,8 +27,33 @@ func _ready() -> void:
 
 func _hook_player() -> void:
 	var player := get_tree().get_first_node_in_group("player")
-	if player and player.has_signal("interact_prompt_changed"):
+	if player == null:
+		return
+	if player.has_signal("interact_prompt_changed"):
 		player.interact_prompt_changed.connect(_on_prompt_changed)
+	if player.has_signal("weapon_changed"):
+		player.weapon_changed.connect(_on_weapon_changed)
+	# The initial weapon_changed fired during the player's _ready (before this
+	# deferred hookup), so bind the already-active weapon now.
+	if player.has_method("get_active_weapon"):
+		var w = player.get_active_weapon()
+		if w:
+			_on_weapon_changed(w)
+
+
+func _on_weapon_changed(weapon: Weapon) -> void:
+	if _bound_weapon and _bound_weapon.ammo_changed.is_connected(_on_ammo_changed):
+		_bound_weapon.ammo_changed.disconnect(_on_ammo_changed)
+	_bound_weapon = weapon
+	if weapon:
+		weapon.ammo_changed.connect(_on_ammo_changed)
+		var a := weapon.get_ammo()
+		_on_ammo_changed(a.x, a.y)
+
+
+func _on_ammo_changed(in_mag: int, reserve: int) -> void:
+	if _bound_weapon:
+		_ammo.text = "%s\n%d / %d" % [_bound_weapon.data.display_name, in_mag, reserve]
 
 
 func _on_prompt_changed(text: String) -> void:
@@ -66,6 +93,21 @@ func _build() -> void:
 	_prompt.position = Vector2(-80, -80)
 	_prompt.visible = false
 	_add_control(_prompt)
+
+	# Ammo, bottom-right (explicit anchors so it pins to the corner reliably).
+	_ammo = _make_label(Vector2.ZERO)
+	_ammo.anchor_left = 1.0
+	_ammo.anchor_right = 1.0
+	_ammo.anchor_top = 1.0
+	_ammo.anchor_bottom = 1.0
+	_ammo.offset_left = -230.0
+	_ammo.offset_top = -80.0
+	_ammo.offset_right = -24.0
+	_ammo.offset_bottom = -20.0
+	_ammo.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	_ammo.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+	_ammo.add_theme_font_size_override("font_size", 22)
+	_add_control(_ammo)
 
 
 func _make_label(pos: Vector2) -> Label:

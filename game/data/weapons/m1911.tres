@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+weapon_id = &"m1911"
+display_name = "M1911"
+damage = 55.0
+range = 140.0
+rounds_per_minute = 130.0
+fire_mode = 0
+pellets = 1
+mag_size = 7
+reserve_ammo = 49
+reload_time = 1.8
+recoil_pitch = 0.03
+recoil_yaw = 0.011
+recoil_recovery = 9.0
+spread_base = 0.01
+spread_per_shot = 0.006
+spread_max = 0.05
+ads_factor = 0.4
+body_style = "PISTOL"
+tint = Color(0.14, 0.14, 0.15, 1)
