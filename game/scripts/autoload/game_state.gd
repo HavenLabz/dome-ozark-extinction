@@ -50,6 +50,9 @@ var gear := {"scent": false, "tracker": false, "ghillie": false}
 var score_purity: float = 1.0
 ## Filled in at extraction so the front-end can show a results card.
 var last_result: Dictionary = {}
+## The one supply drop per hunt (Carnivores-style) — refills ammo. Once used,
+## no more until the next deployment.
+var supply_used: bool = false
 
 
 ## Purity multiplier from the currently-selected gear (−15% per aid).
@@ -118,3 +121,4 @@ func reset_session() -> void:
 	trophies_collected.clear()
 	trophy_score = 0
 	is_extraction_available = false
+	supply_used = false

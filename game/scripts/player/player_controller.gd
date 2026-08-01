@@ -31,6 +31,8 @@ signal weapon_changed(weapon: Weapon)
 signal scan_info_changed(text: String)
 ## Emitted when a shot connects, so the HUD can flash a hitmarker.
 signal hitmarker(on_creature: bool)
+## Emitted on a well-placed hit ("HEAD" / "VITAL") for a HUD callout.
+signal crit_hit(zone: String)
 ## Emitted when the scope overlay should show/hide (true when ADS with a scope).
 signal scope_changed(active: bool, optic_name: String)
 
@@ -141,6 +143,7 @@ func _build_weapons() -> void:
 		w.visible = false
 		camera.add_child(w)
 		w.shot_hit.connect(func(on_creature): hitmarker.emit(on_creature))
+		w.zone_hit.connect(func(zone): crit_hit.emit(zone))
 		_weapons.append(w)
 	if not _weapons.is_empty():
 		_switch_weapon(0)
@@ -180,6 +183,23 @@ func _unhandled_input(event: InputEvent) -> void:
 		var ex := get_tree().get_first_node_in_group("extraction")
 		if ex:
 			ex.begin_extraction(global_position)
+	elif event.is_action_pressed("supply_drop"):
+		_call_supply_drop()
+
+
+## The one supply drop per hunt (Carnivores-style): refills every weapon and
+## tops up rations. Once per deployment.
+func _call_supply_drop() -> void:
+	if GameState.supply_used:
+		scan_info_changed.emit("Supply drop already used this hunt.")
+	else:
+		GameState.supply_used = true
+		for w in _weapons:
+			w.resupply()
+		GameState.hunger = minf(100.0, GameState.hunger + 25.0)
+		GameState.hydration = minf(100.0, GameState.hydration + 25.0)
+		scan_info_changed.emit("SUPPLY DROP — ammunition and rations resupplied.")
+	get_tree().create_timer(3.0).timeout.connect(func(): scan_info_changed.emit(""))
 
 
 func _physics_process(delta: float) -> void:

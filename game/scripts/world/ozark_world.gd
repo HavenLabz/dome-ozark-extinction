@@ -42,6 +42,54 @@ var _water_node: MeshInstance3D          # so weather can raise it in a flood
 var _bird_flock: BirdFlock               # so weather can ground the birds
 
 
+var _loading: CanvasLayer
+var _loading_status: Label
+
+
+func _begin_loading() -> void:
+	_loading = CanvasLayer.new()
+	_loading.layer = 128
+	add_child(_loading)
+	var bg := ColorRect.new()
+	bg.color = Color(0.05, 0.06, 0.05)
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_loading.add_child(bg)
+	var box := VBoxContainer.new()
+	box.set_anchors_preset(Control.PRESET_CENTER)
+	box.position = Vector2(-260, -70)
+	box.custom_minimum_size.x = 520
+	box.add_theme_constant_override("separation", 10)
+	_loading.add_child(box)
+	var title := Label.new()
+	title.text = "ENTERING THE OZARK DOME"
+	title.add_theme_font_size_override("font_size", 30)
+	title.add_theme_color_override("font_color", Color(0.87, 0.66, 0.24))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(title)
+	_loading_status = Label.new()
+	_loading_status.text = "Preparing…"
+	_loading_status.add_theme_font_size_override("font_size", 16)
+	_loading_status.add_theme_color_override("font_color", Color(0.62, 0.66, 0.6))
+	_loading_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_loading_status.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	box.add_child(_loading_status)
+
+
+## Set the loading caption and repaint before the next blocking build step runs.
+func _stage(text: String) -> void:
+	if _loading_status:
+		_loading_status.text = text + " …"
+	await get_tree().process_frame
+	await get_tree().process_frame
+
+
+func _end_loading() -> void:
+	if _loading:
+		_loading.queue_free()
+		_loading = null
+
+
 ## Register a foliage material so the weather system can drive its wind sway.
 func _register_wind_material(mat: ShaderMaterial) -> void:
 	_wind_mats.append({"mat": mat, "base": float(mat.get_shader_parameter("sway_strength"))})
@@ -64,7 +112,12 @@ func _ready() -> void:
 	_moist_noise.seed = spawn_seed + 7
 	_moist_noise.frequency = 0.006
 
+	# Loading screen so the (dense) world generation doesn't look like a frozen
+	# window on launch. Each stage repaints before the blocking work runs.
+	_begin_loading()
+
 	# 1. Ground — a large, open Ozark valley so wildlife spreads out naturally.
+	await _stage("Raising the Ozark terrain")
 	terrain = TerrainGenerator.new()
 	terrain.name = "Terrain"
 	terrain.world_size = 440.0
@@ -75,9 +128,12 @@ func _ready() -> void:
 	terrain.build()
 
 	# 2. Forest, water, ruins, cache
+	await _stage("Growing the forest")
 	_scatter_forest()
+	await _stage("Seeding meadows and undergrowth")
 	_scatter_grass()
 	_scatter_flora()     # ferns, wildflowers, shrubs, fungi, reeds — the Eden layer
+	await _stage("Filling the valley")
 	_build_water()
 	_build_structure(Vector2(-30.0, -25.0))
 	_build_resource_cache(Vector2(-24.0, -20.0))
@@ -92,11 +148,14 @@ func _ready() -> void:
 	await get_tree().physics_frame
 
 	# 3. Navmesh over the assembled static geometry
+	await _stage("Charting the wilderness")
 	await _bake_navigation()
 
 	# 4. Inhabitants + player
+	await _stage("Releasing the wildlife")
 	_place_player()
 	_spawn_wildlife()
+	_end_loading()
 
 	# 5. The dome's own weather ecosystem — wind, rain, storms, floods, tornadoes.
 	_setup_weather()

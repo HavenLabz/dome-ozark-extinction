@@ -11,6 +11,12 @@ var _display_name: String = "Unknown Trophy"
 var _value: int = 0
 var _food: float = 30.0
 var _collected: bool = false
+var _bonus_mult: float = 1.0     # clean-kill bonus (vital/headshot) set by the creature
+
+
+## Set a score multiplier for a well-placed killing shot.
+func set_bonus(mult: float) -> void:
+	_bonus_mult = mult
 
 
 func setup_from_creature(data: CreatureData) -> void:
@@ -33,7 +39,7 @@ func interact() -> void:
 	if _collected:
 		return
 	_collected = true
-	GameState.collect_trophy(_trophy_id, _value)
+	GameState.collect_trophy(_trophy_id, int(round(_value * _bonus_mult)))
 	GameState.eat_food(_food)  # harvest meat
 	queue_free()
 

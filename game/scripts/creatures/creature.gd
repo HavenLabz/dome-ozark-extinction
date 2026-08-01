@@ -43,6 +43,9 @@ var _track_accum: float = 0.0
 var _last_track_pos: Vector3
 ## Per-animal gait variation so a herd never moves in lockstep.
 var _speed_mult: float = 1.0
+## Score multiplier from the best shot placement landed on this animal
+## (1.0 body, 1.25 vitals, 1.5 head) — applied to its trophy value on recovery.
+var _kill_bonus: float = 1.0
 ## The ground speed the CURRENT gait animation is meant for. The model's leg
 ## cycle is scaled to actual speed against this, so feet track the ground
 ## (no foot-sliding). 0 = not a locomotion state (idle/attack), don't scale.
@@ -245,23 +248,36 @@ func _tick_attack(delta: float) -> void:
 # Combat + death
 # ---------------------------------------------------------------------------
 
-## Public API — weapons, hazards, or other creatures call this.
-func take_damage(amount: float, from_position: Vector3 = global_position) -> void:
+## Public API — weapons, hazards, or other creatures call this. `hit_point` (if
+## given) enables shot placement: head and vital hits hurt more and score more.
+## Returns the zone hit ("HEAD" / "VITAL" / "BODY" / "") for HUD feedback.
+func take_damage(amount: float, from_position: Vector3 = global_position, hit_point: Vector3 = Vector3.INF) -> String:
 	if _state == State.DEAD:
-		return
-	_health = maxf(0.0, _health - amount)
+		return ""
+	var zone := ""
+	var dmg_mult := 1.0
+	if hit_point.x != INF and data.body_size.y > 0.1:
+		var rel := (hit_point.y - global_position.y) / data.body_size.y   # 0 feet .. 1 crown
+		if rel > 0.8:
+			zone = "HEAD"; dmg_mult = 2.5; _kill_bonus = 1.5
+		elif rel > 0.48:
+			zone = "VITAL"; dmg_mult = 1.6; _kill_bonus = maxf(_kill_bonus, 1.25)
+		else:
+			zone = "BODY"
+	_health = maxf(0.0, _health - amount * dmg_mult)
 	health_changed.emit(_health, data.max_health)
 	_last_known_pos = from_position
 	_time_since_sensed = 0.0
 	if _health <= 0.0:
 		_die()
-		return
+		return zone
 	# Being hurt overrides calm behavior.
 	if data.diet == CreatureData.Diet.HERBIVORE or not data.is_aggressive:
 		_change_state(State.FLEE)
 	else:
 		_target = _find_player()
 		_change_state(State.HUNT)
+	return zone
 
 
 func _deal_attack_damage() -> void:
@@ -292,6 +308,8 @@ func _spawn_trophy() -> void:
 	trophy.global_position = global_position + Vector3.UP * 0.3
 	if trophy.has_method("setup_from_creature"):
 		trophy.setup_from_creature(data)
+	if trophy.has_method("set_bonus"):
+		trophy.set_bonus(_kill_bonus)
 
 
 # ---------------------------------------------------------------------------

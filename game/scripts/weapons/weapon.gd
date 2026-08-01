@@ -12,6 +12,8 @@ signal fired()
 signal shot_hit(on_creature: bool)
 ## Emitted when the attached optic changes (name for the HUD).
 signal optic_changed(name: String)
+## Emitted on a well-placed hit ("HEAD" or "VITAL") for HUD feedback.
+signal zone_hit(zone: String)
 
 @export var data: WeaponData
 
@@ -163,6 +165,14 @@ func reload() -> void:
 	reload_started.emit(data.reload_time)
 
 
+## Refill this weapon to full from a supply drop.
+func resupply() -> void:
+	_reserve = data.reserve_ammo
+	if not _reloading:
+		_in_mag = data.mag_size
+	ammo_changed.emit(_in_mag, _reserve)
+
+
 ## Player calls this each frame to raise/lower the sights.
 func set_ads(on: bool) -> void:
 	_ads_active = on
@@ -237,7 +247,9 @@ func _do_hitscan(ads: bool) -> void:
 		var collider: Object = hit.get("collider")
 		var on_creature := collider != null and collider.has_method("take_damage")
 		if on_creature:
-			collider.take_damage(data.damage, from)
+			var zone: String = collider.take_damage(data.damage, from, hit.get("position"))
+			if zone == "HEAD" or zone == "VITAL":
+				zone_hit.emit(zone)
 		_spawn_impact(hit.get("position"), hit.get("normal"), on_creature)
 		shot_hit.emit(on_creature)
 

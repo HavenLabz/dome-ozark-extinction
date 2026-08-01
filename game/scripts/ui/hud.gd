@@ -12,6 +12,8 @@ var _scan: Label
 var _extract: Label
 var _hitmark: Label
 var _hit_t: float = 0.0
+var _crit: Label
+var _crit_t: float = 0.0
 var _cross: Label
 var _scope: Control
 var _bound_weapon: Weapon
@@ -51,6 +53,8 @@ func _hook_player() -> void:
 		player.scan_info_changed.connect(_on_scan_changed)
 	if player.has_signal("hitmarker"):
 		player.hitmarker.connect(_on_hitmarker)
+	if player.has_signal("crit_hit"):
+		player.crit_hit.connect(_on_crit)
 	if player.has_signal("scope_changed"):
 		player.scope_changed.connect(_on_scope_changed)
 	# The initial weapon_changed fired during the player's _ready (before this
@@ -156,12 +160,24 @@ func _on_hitmarker(on_creature: bool) -> void:
 	_hit_t = 0.22
 
 
+func _on_crit(zone: String) -> void:
+	_crit.text = "HEADSHOT" if zone == "HEAD" else "VITAL HIT"
+	_crit.add_theme_color_override("font_color", Color(1.0, 0.85, 0.3) if zone == "HEAD" else Color(1.0, 0.5, 0.35))
+	_crit.visible = true
+	_crit_t = 1.1
+
+
 func _process(delta: float) -> void:
 	if _hit_t > 0.0:
 		_hit_t -= delta
 		_hitmark.modulate.a = clampf(_hit_t / 0.22, 0.0, 1.0)
 		if _hit_t <= 0.0:
 			_hitmark.visible = false
+	if _crit_t > 0.0:
+		_crit_t -= delta
+		_crit.modulate.a = clampf(_crit_t / 1.1, 0.0, 1.0)
+		if _crit_t <= 0.0:
+			_crit.visible = false
 
 
 func _on_prompt_changed(text: String) -> void:
@@ -199,6 +215,16 @@ func _build() -> void:
 	_hitmark.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_hitmark.visible = false
 	_add_control(_hitmark)
+
+	# Vital/headshot callout — appears just above the crosshair on a placed shot.
+	_crit = Label.new()
+	_crit.add_theme_font_size_override("font_size", 20)
+	_crit.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_crit.position = Vector2(-80, 120)
+	_crit.custom_minimum_size.x = 160
+	_crit.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_crit.visible = false
+	_add_control(_crit)
 
 	_stats = _make_label(Vector2(16, 16))
 	_add_control(_stats)
