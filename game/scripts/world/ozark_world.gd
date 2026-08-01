@@ -48,6 +48,7 @@ func _ready() -> void:
 	# 2. Forest, water, ruins, cache
 	_scatter_forest()
 	_scatter_grass()
+	_scatter_flora()     # ferns, wildflowers, shrubs, fungi, reeds — the Eden layer
 	_build_water()
 	_build_structure(Vector2(-30.0, -25.0))
 	_build_resource_cache(Vector2(-24.0, -20.0))
@@ -180,9 +181,26 @@ func _capture_screenshot() -> void:
 # ---------------------------------------------------------------------------
 
 func _scatter_forest() -> void:
-	# Real CC0 tree models (Quaternius) when imported; procedural fallback otherwise.
+	# Real CC0 broadleaf model (Quaternius oak) for the hardwoods; shortleaf pines
+	# are built procedurally from thousands of individual needles so they read as
+	# real conifers, not blocky cones.
 	var oak_scene: PackedScene = load("res://assets/environment/oak.glb") if ResourceLoader.exists("res://assets/environment/oak.glb") else null
-	var pine_scene: PackedScene = load("res://assets/environment/pine.glb") if ResourceLoader.exists("res://assets/environment/pine.glb") else null
+
+	# Pre-build a few detailed conifer variants once; every pine instances one of
+	# these shared meshes (built once, uploaded to the GPU once) with per-tree
+	# scale + rotation for variety. "Every needle" without a per-tree cost.
+	var conifer_needles: Array[ArrayMesh] = []
+	for v in 3:
+		conifer_needles.append(_make_conifer_needle_mesh(9.0, 2.2 + 0.45 * v, 0.9 + 0.2 * v))
+	var conifer_trunk := CylinderMesh.new()
+	conifer_trunk.bottom_radius = 0.34
+	conifer_trunk.top_radius = 0.07
+	conifer_trunk.height = 9.0
+	var conifer_mat := _make_foliage_material(Color(0.05, 0.12, 0.05), Color(0.17, 0.31, 0.12))
+	conifer_mat.set_shader_parameter("height_ref", 9.0)
+	conifer_mat.set_shader_parameter("sway_strength", 0.09)
+	var bark_mat := _solid_mat(Color(0.24, 0.17, 0.11))
+	bark_mat.roughness = 0.95
 
 	var half := terrain.world_size * 0.5 - 4.0
 	for i in tree_count:
@@ -196,16 +214,88 @@ func _scatter_forest() -> void:
 			continue
 		# Real Ozark forest is oak-hickory dominant with shortleaf pine mixed in.
 		var scale := _rng.randf_range(0.8, 1.5)
-		if _rng.randf() < 0.62:
-			if oak_scene:
-				nav_region.add_child(_make_glb_tree(p, oak_scene, 11.0 * scale, 0.45 * scale))
-			else:
-				nav_region.add_child(_make_broadleaf_tree(p, scale))
+		if _rng.randf() < 0.55 and oak_scene:
+			nav_region.add_child(_make_glb_tree(p, oak_scene, 11.0 * scale, 0.45 * scale))
 		else:
-			if pine_scene:
-				nav_region.add_child(_make_glb_tree(p, pine_scene, 12.0 * scale, 0.35 * scale))
-			else:
-				nav_region.add_child(_make_tree(p, scale))
+			nav_region.add_child(_make_conifer_tree(
+				p, conifer_needles.pick_random(), conifer_trunk, conifer_mat, bark_mat, scale))
+
+
+## A detailed shortleaf-pine: shared needle + trunk meshes, per-tree scale/spin.
+func _make_conifer_tree(base: Vector3, needles: ArrayMesh, trunk_mesh: Mesh,
+		foliage_mat: Material, bark_mat: Material, scale: float) -> StaticBody3D:
+	var tree := StaticBody3D.new()
+	tree.collision_layer = 1
+	tree.collision_mask = 0
+	tree.position = base
+	tree.rotation.y = _rng.randf_range(0.0, TAU)
+
+	var trunk := MeshInstance3D.new()
+	trunk.mesh = trunk_mesh
+	trunk.material_override = bark_mat
+	trunk.scale = Vector3(scale, scale, scale)
+	trunk.position.y = 9.0 * scale * 0.5
+	tree.add_child(trunk)
+
+	var foliage := MeshInstance3D.new()
+	foliage.mesh = needles
+	foliage.material_override = foliage_mat
+	foliage.scale = Vector3(scale, scale, scale)
+	tree.add_child(foliage)
+
+	var col := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.34 * scale
+	shape.height = 9.0 * scale
+	col.shape = shape
+	col.position.y = 9.0 * scale * 0.5
+	tree.add_child(col)
+	return tree
+
+
+## One conifer's foliage: hundreds of drooping needle-sprays filling a cone, each
+## spray a fan of thin tapered needles. Built once, shared across every pine.
+##   height   — full tree height (trunk + crown)
+##   base_r   — crown radius at its widest (near the bottom)
+##   fullness — needle density / length multiplier
+func _make_conifer_needle_mesh(height: float, base_r: float, fullness: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var foliage_start := height * 0.13
+	var sprays := int(1150.0 * fullness)
+	for s in sprays:
+		# Bias sprays toward the bottom so the crown is fuller below (real conifer).
+		var t := pow(_rng.randf(), 0.78)
+		var y := lerpf(foliage_start, height * 0.99, t)
+		var cone_t := (y - foliage_start) / (height - foliage_start)   # 0 base .. 1 tip
+		var cone_r := base_r * (1.0 - cone_t * 0.9)
+		var ang := _rng.randf_range(0.0, TAU)
+		var r := cone_r * _rng.randf_range(0.25, 1.0)
+		var center := Vector3(cos(ang) * r, y, sin(ang) * r)
+		# Branch direction: outward and gently drooping.
+		var outward := Vector3(cos(ang), 0.0, sin(ang))
+		var dir := (outward + Vector3(0.0, -0.38, 0.0)).normalized()
+		var needles := _rng.randi_range(5, 9)
+		for n in needles:
+			var ndir := dir.rotated(Vector3.UP, _rng.randf_range(-0.7, 0.7))
+			ndir = (ndir + Vector3(0.0, _rng.randf_range(-0.22, 0.12), 0.0)).normalized()
+			var side := ndir.cross(Vector3.UP)
+			if side.length() < 0.01:
+				side = Vector3(1, 0, 0)
+			side = side.normalized()
+			var length := _rng.randf_range(0.24, 0.44) * fullness
+			var tip := center + ndir * length
+			var w := 0.024
+			var bl := center - side * w
+			var br := center + side * w
+			# Two crossed triangles per needle-spray point so it reads full from any
+			# angle instead of vanishing edge-on.
+			var up := side.cross(ndir).normalized() * w
+			for v in [bl, br, tip, center - up, center + up, tip]:
+				st.set_uv(Vector2(0, 0))
+				st.add_vertex(v)
+	st.generate_normals()
+	return st.commit()
 
 
 ## Instance a real tree GLB, auto-fit it to target_h, drop it on the ground, and
@@ -370,6 +460,264 @@ func _make_grass_clump_mesh() -> ArrayMesh:
 			for v in tri:
 				st.set_uv(Vector2(0, 0))
 				st.add_vertex(v)
+	st.generate_normals()
+	return st.commit()
+
+
+# ---------------------------------------------------------------------------
+# Biodiversity — the "Garden of Eden" ground flora
+#
+# A palette of procedural native-plant types (ferns, wildflowers in six colours,
+# shrubs, forest herbs, fungi, waterside reeds) scattered by the tens of
+# thousands via MultiMesh (one draw call per type) and placed by biome so the
+# forest floor reads as lush and varied rather than a bare lawn. All share one
+# vertex-coloured material; per-plant colour is baked into each mesh.
+# ---------------------------------------------------------------------------
+
+func _scatter_flora() -> void:
+	var mat := _make_vcolor_material()
+
+	var fern := _make_fern_mesh()
+	var bush := _make_bush_mesh()
+	var shroom := _make_mushroom_mesh()
+	var reed := _make_reed_mesh()
+	var herb := _make_herb_mesh()
+
+	# Wildflowers in several real Ozark colours (bloodroot white, coreopsis gold,
+	# wild bergamot lavender, phlox pink, fire pink red, butterfly-weed orange).
+	var flower_cols := [
+		Color(0.95, 0.95, 0.90), Color(0.96, 0.82, 0.18), Color(0.66, 0.42, 0.82),
+		Color(0.92, 0.46, 0.62), Color(0.86, 0.18, 0.14), Color(0.97, 0.58, 0.14),
+	]
+
+	_scatter_plant(fern, mat, 9000, "wet_shade")
+	_scatter_plant(herb, mat, 7000, "land")
+	_scatter_plant(bush, mat, 3500, "land")
+	_scatter_plant(shroom, mat, 4500, "land")
+	_scatter_plant(reed, mat, 5000, "waterline")
+	for c in flower_cols:
+		_scatter_plant(_make_flower_mesh(c), mat, 2600, "land")
+
+
+## One vertex-coloured, double-sided matte material shared by all ground flora.
+func _make_vcolor_material() -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.vertex_color_use_as_albedo = true
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.roughness = 0.93
+	m.specular = 0.08
+	return m
+
+
+## Scatter `count` instances of `mesh` across the terrain under a biome filter.
+func _scatter_plant(mesh: ArrayMesh, mat: Material, count: int, biome: String) -> void:
+	var half := terrain.world_size * 0.5 - 4.0
+	var xforms: Array[Transform3D] = []
+	for i in count:
+		var x := _rng.randf_range(-half, half)
+		var z := _rng.randf_range(-half, half)
+		var p := terrain.surface_point(x, z)
+		var above := p.y - _water_level
+		match biome:
+			"waterline":
+				if above < 0.15 or above > 1.7:
+					continue
+			"wet_shade":
+				if above < 0.5 or above > 6.0:
+					continue
+			_:  # "land"
+				if above < 0.8:
+					continue
+		if Vector2(x, z).distance_to(player_start) < 4.0:
+			continue
+		var sc := _rng.randf_range(0.6, 1.1)
+		var basis := Basis.from_euler(Vector3(0.0, _rng.randf_range(0.0, TAU), 0.0)).scaled(Vector3(sc, sc, sc))
+		xforms.append(Transform3D(basis, p))
+	if xforms.is_empty():
+		return
+	var mm := MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in xforms.size():
+		mm.set_instance_transform(i, xforms[i])
+	var mmi := MultiMeshInstance3D.new()
+	mmi.name = "Flora"
+	mmi.multimesh = mm
+	mmi.material_override = mat
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+
+
+## Fern — a rosette of arching fronds, each lined with paired leaflets.
+func _make_fern_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var base_col := Color(0.09, 0.20, 0.07)
+	var tip_col := Color(0.28, 0.44, 0.16)
+	var fronds := _rng.randi_range(5, 8)
+	for f in fronds:
+		var yaw := _rng.randf_range(0.0, TAU)
+		var out := Vector3(cos(yaw), 0.0, sin(yaw))
+		var side := Vector3(-sin(yaw), 0.0, cos(yaw))
+		var length := _rng.randf_range(0.4, 0.7)
+		var segs := 9
+		for s in segs:
+			var u := s / float(segs)
+			var pos := out * (length * u) + Vector3(0.0, length * (0.45 * sin(u * 2.4) + 0.05), 0.0)
+			var col := base_col.lerp(tip_col, u)
+			var ll := (1.0 - u) * 0.13 + 0.02
+			for sgn: float in [-1.0, 1.0]:
+				var tip := pos + side * sgn * ll + out * ll * 0.4 + Vector3(0.0, ll * 0.35, 0.0)
+				st.set_color(col); st.add_vertex(pos)
+				st.set_color(col); st.add_vertex(pos + out * ll * 0.35 + Vector3(0.0, 0.006, 0.0))
+				st.set_color(col.lerp(tip_col, 0.3)); st.add_vertex(tip)
+	st.generate_normals()
+	return st.commit()
+
+
+## Wildflower — thin cross-quad stem topped with a ring of coloured petals.
+func _make_flower_mesh(petal: Color) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stem := Color(0.16, 0.30, 0.11)
+	var center := Color(0.96, 0.80, 0.22)
+	var h := _rng.randf_range(0.26, 0.46)
+	var sw := 0.012
+	var top := Vector3(0.0, h, 0.0)
+	for axis in [Vector3(1, 0, 0), Vector3(0, 0, 1)]:
+		st.set_color(stem); st.add_vertex(-axis * sw)
+		st.set_color(stem); st.add_vertex(axis * sw)
+		st.set_color(stem); st.add_vertex(top + axis * sw * 0.3)
+	var petals := 6
+	for pi in petals:
+		var a := TAU * pi / petals
+		var d := Vector3(cos(a), 0.0, sin(a))
+		var s := d.cross(Vector3.UP).normalized() * 0.028
+		var pl := _rng.randf_range(0.06, 0.095)
+		var inner := top + Vector3(0.0, 0.006, 0.0)
+		var outer := top + d * pl + Vector3(0.0, 0.012, 0.0)
+		st.set_color(center); st.add_vertex(inner)
+		st.set_color(petal); st.add_vertex(inner + d * pl * 0.5 - s)
+		st.set_color(petal); st.add_vertex(inner + d * pl * 0.5 + s)
+		st.set_color(petal); st.add_vertex(inner + d * pl * 0.5 - s)
+		st.set_color(petal); st.add_vertex(outer)
+		st.set_color(petal); st.add_vertex(inner + d * pl * 0.5 + s)
+	st.generate_normals()
+	return st.commit()
+
+
+## Shrub — a dome of small leaf quads.
+func _make_bush_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var leaves := 130
+	var radius := 0.42
+	for i in leaves:
+		var dir := Vector3(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-0.15, 1.0), _rng.randf_range(-1.0, 1.0)).normalized()
+		var c := dir * radius * _rng.randf_range(0.5, 1.0) + Vector3(0.0, radius * 0.75, 0.0)
+		var lit := clampf(c.y / (radius * 1.5), 0.0, 1.0)
+		var col := Color(0.08, 0.19, 0.06).lerp(Color(0.22, 0.38, 0.13), lit) * _rng.randf_range(0.82, 1.12)
+		var t := dir.cross(Vector3.UP)
+		if t.length() < 0.01:
+			t = Vector3(1, 0, 0)
+		t = t.normalized()
+		var b := dir.cross(t).normalized()
+		var sz := _rng.randf_range(0.045, 0.085)
+		var p0 := c - t * sz - b * sz
+		var p1 := c + t * sz - b * sz
+		var p2 := c + t * sz + b * sz
+		var p3 := c - t * sz + b * sz
+		for v in [p0, p1, p2, p0, p2, p3]:
+			st.set_color(col); st.add_vertex(v)
+	st.generate_normals()
+	return st.commit()
+
+
+## Fungi — a small cluster of capped mushrooms.
+func _make_mushroom_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var caps := _rng.randi_range(2, 4)
+	var cap_cols := [Color(0.68, 0.16, 0.12), Color(0.55, 0.40, 0.24), Color(0.86, 0.80, 0.62), Color(0.80, 0.50, 0.20)]
+	var stem_col := Color(0.90, 0.88, 0.78)
+	for m in caps:
+		var off := Vector3(_rng.randf_range(-0.12, 0.12), 0.0, _rng.randf_range(-0.12, 0.12))
+		var sh := _rng.randf_range(0.05, 0.13)
+		var sr := 0.014
+		for axis in [Vector3(1, 0, 0), Vector3(0, 0, 1)]:
+			st.set_color(stem_col); st.add_vertex(off - axis * sr)
+			st.set_color(stem_col); st.add_vertex(off + axis * sr)
+			st.set_color(stem_col); st.add_vertex(off + Vector3(0.0, sh, 0.0))
+		var cr := sh * _rng.randf_range(0.55, 0.95)
+		var cy := off + Vector3(0.0, sh, 0.0)
+		var apex := cy + Vector3(0.0, cr * 0.8, 0.0)
+		var cc: Color = cap_cols[_rng.randi() % cap_cols.size()]
+		var seg := 8
+		for k in seg:
+			var a0 := TAU * k / seg
+			var a1 := TAU * (k + 1) / seg
+			st.set_color(cc); st.add_vertex(apex)
+			st.set_color(cc); st.add_vertex(cy + Vector3(cos(a0) * cr, 0.0, sin(a0) * cr))
+			st.set_color(cc); st.add_vertex(cy + Vector3(cos(a1) * cr, 0.0, sin(a1) * cr))
+	st.generate_normals()
+	return st.commit()
+
+
+## Waterside reeds — tall blades with the odd brown cattail head.
+func _make_reed_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var base_col := Color(0.19, 0.30, 0.10)
+	var tip_col := Color(0.42, 0.50, 0.22)
+	var blades := _rng.randi_range(5, 9)
+	for i in blades:
+		var yaw := _rng.randf_range(0.0, TAU)
+		var h := _rng.randf_range(0.9, 1.5)
+		var lean := Vector3(cos(yaw), 0.0, sin(yaw)) * _rng.randf_range(0.05, 0.22) * h
+		var side := Vector3(-sin(yaw), 0.0, cos(yaw)) * 0.022
+		var top := Vector3(0.0, h, 0.0) + lean
+		st.set_color(base_col); st.add_vertex(-side)
+		st.set_color(base_col); st.add_vertex(side)
+		st.set_color(tip_col); st.add_vertex(top)
+	if _rng.randf() < 0.7:
+		var hh := _rng.randf_range(0.7, 1.15)
+		var brown := Color(0.34, 0.21, 0.10)
+		var cy := Vector3(0.0, hh, 0.0)
+		var r := 0.03
+		var apex := cy + Vector3(0.0, 0.2, 0.0)
+		var seg := 6
+		for k in seg:
+			var a0 := TAU * k / seg
+			var a1 := TAU * (k + 1) / seg
+			st.set_color(brown); st.add_vertex(cy + Vector3(cos(a0) * r, 0.0, sin(a0) * r))
+			st.set_color(brown); st.add_vertex(cy + Vector3(cos(a1) * r, 0.0, sin(a1) * r))
+			st.set_color(brown); st.add_vertex(apex)
+	st.generate_normals()
+	return st.commit()
+
+
+## Broadleaf forest herb — a low rosette of a few big leaves.
+func _make_herb_mesh() -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var base_col := Color(0.10, 0.22, 0.07)
+	var tip_col := Color(0.20, 0.34, 0.11)
+	var leaves := _rng.randi_range(4, 7)
+	for i in leaves:
+		var yaw := TAU * i / leaves + _rng.randf_range(-0.3, 0.3)
+		var d := Vector3(cos(yaw), 0.0, sin(yaw))
+		var L := _rng.randf_range(0.16, 0.32)
+		var mid := d * L * 0.5 + Vector3(0.0, L * 0.5, 0.0)
+		var tip := d * L + Vector3(0.0, L * 0.62, 0.0)
+		var side := d.cross(Vector3.UP).normalized() * L * 0.24
+		var b0 := Vector3(0.0, 0.02, 0.0)
+		st.set_color(base_col); st.add_vertex(b0)
+		st.set_color(tip_col); st.add_vertex(mid - side)
+		st.set_color(tip_col); st.add_vertex(mid + side)
+		st.set_color(tip_col); st.add_vertex(mid - side)
+		st.set_color(tip_col); st.add_vertex(tip)
+		st.set_color(tip_col); st.add_vertex(mid + side)
 	st.generate_normals()
 	return st.commit()
 
