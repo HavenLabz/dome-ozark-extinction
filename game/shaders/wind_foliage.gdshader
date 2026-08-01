@@ -30,7 +30,9 @@ void vertex() {
 }
 
 void fragment() {
-	ALBEDO = mix(color_bottom, color_top, grad);
+	// Vertex colour tints per-leaf/needle variety (autumn, dry patches); meshes
+	// with no COLOR attribute get white (1,1,1) so this is a no-op for them.
+	ALBEDO = mix(color_bottom, color_top, grad) * COLOR.rgb;
 	ROUGHNESS = roughness_val;
 	SPECULAR = 0.1;
 	if (sky_lit > 0.5) {

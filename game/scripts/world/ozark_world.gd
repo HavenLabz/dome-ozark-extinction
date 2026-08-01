@@ -30,10 +30,20 @@ var terrain: TerrainGenerator
 var nav_map: RID                     # the dome's dedicated navigation map
 var _rng := RandomNumberGenerator.new()
 var _water_level: float = -1.5
+## Biome fields: large-scale noise that carves the Ozarks into dense forest,
+## open glades/balds, and everything between, so tree + flora density varies
+## across the map instead of being a uniform sprinkle.
+var _forest_noise := FastNoiseLite.new()
+var _moist_noise := FastNoiseLite.new()
 
 
 func _ready() -> void:
 	_rng.seed = spawn_seed
+	_forest_noise.seed = spawn_seed
+	_forest_noise.frequency = 0.0045          # ~220-unit forest/glade patches
+	_forest_noise.fractal_octaves = 3
+	_moist_noise.seed = spawn_seed + 7
+	_moist_noise.frequency = 0.006
 
 	# 1. Ground — a large, open Ozark valley so wildlife spreads out naturally.
 	terrain = TerrainGenerator.new()
@@ -180,15 +190,21 @@ func _capture_screenshot() -> void:
 # Forest
 # ---------------------------------------------------------------------------
 
-func _scatter_forest() -> void:
-	# Real CC0 broadleaf model (Quaternius oak) for the hardwoods; shortleaf pines
-	# are built procedurally from thousands of individual needles so they read as
-	# real conifers, not blocky cones.
-	var oak_scene: PackedScene = load("res://assets/environment/oak.glb") if ResourceLoader.exists("res://assets/environment/oak.glb") else null
+## Biome density at (x,z): 1 = dense forest, 0 = open glade/bald.
+func _forest_density(x: float, z: float) -> float:
+	return clampf(_forest_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
 
-	# Pre-build a few detailed conifer variants once; every pine instances one of
-	# these shared meshes (built once, uploaded to the GPU once) with per-tree
-	# scale + rotation for variety. "Every needle" without a per-tree cost.
+## Moisture at (x,z): 1 = wet bottomland (hardwoods), 0 = dry ridge (pine).
+func _moisture(x: float, z: float) -> float:
+	return clampf(_moist_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
+
+
+func _scatter_forest() -> void:
+	# Shortleaf pines and oak-hickory hardwoods, both built procedurally from
+	# thousands of individual needles/leaves. Density follows the biome field:
+	# dense stands in the forest zones, sparse in the glades and balds.
+
+	# --- Conifer (shortleaf pine) shared assets ---
 	var conifer_needles: Array[ArrayMesh] = []
 	for v in 3:
 		conifer_needles.append(_make_conifer_needle_mesh(9.0, 2.2 + 0.45 * v, 0.9 + 0.2 * v))
@@ -199,26 +215,125 @@ func _scatter_forest() -> void:
 	var conifer_mat := _make_foliage_material(Color(0.05, 0.12, 0.05), Color(0.17, 0.31, 0.12))
 	conifer_mat.set_shader_parameter("height_ref", 9.0)
 	conifer_mat.set_shader_parameter("sway_strength", 0.09)
+
+	# --- Deciduous (oak/hickory) shared assets: canopies of individual leaves ---
+	var decid_canopies: Array[ArrayMesh] = []
+	decid_canopies.append(_make_broadleaf_canopy_mesh(3.3, 0.0))    # full summer green
+	decid_canopies.append(_make_broadleaf_canopy_mesh(3.1, 0.35))   # turning (autumn)
+	decid_canopies.append(_make_broadleaf_canopy_mesh(3.6, 0.12))   # mostly green
+	var decid_trunk := CylinderMesh.new()
+	decid_trunk.bottom_radius = 0.44
+	decid_trunk.top_radius = 0.16
+	decid_trunk.height = 5.5
+	# White gradient → the baked per-leaf vertex colour is the actual colour.
+	var decid_mat := _make_foliage_material(Color.WHITE, Color.WHITE)
+	decid_mat.set_shader_parameter("height_ref", 8.0)
+	decid_mat.set_shader_parameter("sway_strength", 0.16)
+
 	var bark_mat := _solid_mat(Color(0.24, 0.17, 0.11))
 	bark_mat.roughness = 0.95
+	var oak_bark := _solid_mat(Color(0.29, 0.22, 0.15))
+	oak_bark.roughness = 0.95
 
+	# Oversample candidates and accept by local forest density, so trees cluster
+	# into real stands with open ground between — biome variety, "Minecraft" style.
 	var half := terrain.world_size * 0.5 - 4.0
-	for i in tree_count:
+	var candidates := tree_count * 4
+	for i in candidates:
 		var x := _rng.randf_range(-half, half)
 		var z := _rng.randf_range(-half, half)
 		var p := terrain.surface_point(x, z)
 		if p.y < _water_level + 0.4:
 			continue  # no trees in the water
-		# Keep the player's landing zone clear.
 		if Vector2(x, z).distance_to(player_start) < 6.0:
-			continue
-		# Real Ozark forest is oak-hickory dominant with shortleaf pine mixed in.
+			continue  # keep the landing zone clear
+		var fd := _forest_density(x, z)
+		if _rng.randf() > clampf(fd * 1.15, 0.05, 1.0):
+			continue  # thin out toward the glades
 		var scale := _rng.randf_range(0.8, 1.5)
-		if _rng.randf() < 0.55 and oak_scene:
-			nav_region.add_child(_make_glb_tree(p, oak_scene, 11.0 * scale, 0.45 * scale))
-		else:
+		# Pines favour dry ridges; hardwoods favour wetter bottomland.
+		var moist := _moisture(x, z)
+		var elev := clampf((p.y - _water_level) / 12.0, 0.0, 1.0)
+		var conifer_chance := 0.26 + elev * 0.34 + (1.0 - moist) * 0.16
+		if _rng.randf() < conifer_chance:
 			nav_region.add_child(_make_conifer_tree(
 				p, conifer_needles.pick_random(), conifer_trunk, conifer_mat, bark_mat, scale))
+		else:
+			nav_region.add_child(_make_deciduous_tree(
+				p, decid_canopies.pick_random(), decid_trunk, decid_mat, oak_bark, scale))
+
+
+## A hardwood: shared trunk + a canopy of individual leaves, per-tree scale/spin.
+func _make_deciduous_tree(base: Vector3, canopy: ArrayMesh, trunk_mesh: Mesh,
+		foliage_mat: Material, bark_mat: Material, scale: float) -> StaticBody3D:
+	var tree := StaticBody3D.new()
+	tree.collision_layer = 1
+	tree.collision_mask = 0
+	tree.position = base
+	tree.rotation.y = _rng.randf_range(0.0, TAU)
+
+	var trunk := MeshInstance3D.new()
+	trunk.mesh = trunk_mesh
+	trunk.material_override = bark_mat
+	trunk.scale = Vector3(scale, scale, scale)
+	trunk.position.y = 5.5 * scale * 0.5
+	tree.add_child(trunk)
+
+	var foliage := MeshInstance3D.new()
+	foliage.mesh = canopy
+	foliage.material_override = foliage_mat
+	foliage.scale = Vector3(scale, scale, scale)
+	foliage.position.y = 5.2 * scale     # canopy sits on top of the trunk
+	tree.add_child(foliage)
+
+	var col := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = 0.44 * scale
+	shape.height = 5.5 * scale
+	col.shape = shape
+	col.position.y = 5.5 * scale * 0.5
+	tree.add_child(col)
+	return tree
+
+
+## A hardwood canopy: hundreds of small leaf quads filling a rounded crown, with
+## a share of autumn colour. Built once, shared across every tree of the variant.
+##   radius  — crown radius
+##   autumn  — fraction of leaves that turn gold/red
+func _make_broadleaf_canopy_mesh(radius: float, autumn: float) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var green_lo := Color(0.07, 0.18, 0.05)
+	var green_hi := Color(0.24, 0.40, 0.13)
+	var gold := Color(0.74, 0.52, 0.12)
+	var red := Color(0.62, 0.18, 0.10)
+	var center_y := radius
+	var leaves := int(1300.0 * (radius / 3.3))
+	for i in leaves:
+		var dir := Vector3(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-0.65, 1.0), _rng.randf_range(-1.0, 1.0)).normalized()
+		var rr := radius * _rng.randf_range(0.5, 1.0)
+		var c := Vector3(dir.x * rr, center_y + dir.y * rr * 0.85, dir.z * rr)
+		var lit := clampf(c.y / (radius * 1.85), 0.0, 1.0)
+		var col := green_lo.lerp(green_hi, lit)
+		if _rng.randf() < autumn:
+			col = gold.lerp(red, _rng.randf()) * _rng.randf_range(0.8, 1.1)
+		else:
+			col = col * _rng.randf_range(0.8, 1.12)
+		var t := dir.cross(Vector3.UP)
+		if t.length() < 0.01:
+			t = Vector3(1, 0, 0)
+		t = t.normalized()
+		var b := dir.cross(t).normalized()
+		var sz := _rng.randf_range(0.12, 0.2)
+		var p0 := c - t * sz - b * sz
+		var p1 := c + t * sz - b * sz
+		var p2 := c + t * sz + b * sz
+		var p3 := c - t * sz + b * sz
+		for v in [p0, p1, p2, p0, p2, p3]:
+			st.set_color(col)
+			st.add_vertex(v)
+	st.generate_normals()
+	return st.commit()
 
 
 ## A detailed shortleaf-pine: shared needle + trunk meshes, per-tree scale/spin.
@@ -392,7 +507,7 @@ func _make_tree(base: Vector3, scale: float) -> StaticBody3D:
 ## Dense wind-swayed grass via a single MultiMesh (one draw call).
 ## Each instance is a small clump of thin tapered blades — reads as real grass,
 ## not flat cards. Density + per-clump size/tilt variation sell the field.
-func _scatter_grass(clump_count: int = 55000) -> void:
+func _scatter_grass(clump_count: int = 80000) -> void:
 	var blade := _make_grass_clump_mesh()
 	# Natural, slightly desaturated Ozark green (base darker, tips lit).
 	var mat := _make_foliage_material(Color(0.16, 0.26, 0.09), Color(0.38, 0.50, 0.19))
@@ -409,6 +524,9 @@ func _scatter_grass(clump_count: int = 55000) -> void:
 		var p := terrain.surface_point(x, z)
 		if p.y < _water_level + 0.6:
 			continue  # no grass in water
+		# Thickest in the open glades, thinner under dense shaded canopy.
+		if _rng.randf() > clampf(1.0 - _forest_density(x, z) * 0.55, 0.35, 1.0):
+			continue
 		# Vary height and footprint per clump so the field isn't uniform.
 		var sc := _rng.randf_range(0.55, 1.35)
 		var wide := _rng.randf_range(0.85, 1.2)
@@ -490,13 +608,15 @@ func _scatter_flora() -> void:
 		Color(0.92, 0.46, 0.62), Color(0.86, 0.18, 0.14), Color(0.97, 0.58, 0.14),
 	]
 
-	_scatter_plant(fern, mat, 9000, "wet_shade")
-	_scatter_plant(herb, mat, 7000, "land")
-	_scatter_plant(bush, mat, 3500, "land")
-	_scatter_plant(shroom, mat, 4500, "land")
-	_scatter_plant(reed, mat, 5000, "waterline")
+	# Understory species cluster in the forest; wildflowers fill the open glades;
+	# reeds line the water — density follows the biome, not a uniform sprinkle.
+	_scatter_plant(fern, mat, 17000, "wet_shade", "forest")
+	_scatter_plant(herb, mat, 12000, "land", "forest")
+	_scatter_plant(bush, mat, 7000, "land", "any")
+	_scatter_plant(shroom, mat, 8000, "land", "forest")
+	_scatter_plant(reed, mat, 6000, "waterline", "any")
 	for c in flower_cols:
-		_scatter_plant(_make_flower_mesh(c), mat, 2600, "land")
+		_scatter_plant(_make_flower_mesh(c), mat, 4000, "land", "open")
 
 
 ## One vertex-coloured, double-sided matte material shared by all ground flora.
@@ -509,8 +629,10 @@ func _make_vcolor_material() -> StandardMaterial3D:
 	return m
 
 
-## Scatter `count` instances of `mesh` across the terrain under a biome filter.
-func _scatter_plant(mesh: ArrayMesh, mat: Material, count: int, biome: String) -> void:
+## Scatter up to `count` instances of `mesh` under a placement filter (biome) and
+## a density preference (`prefer`: "forest" clusters in tree cover, "open" fills
+## the glades, "any" is neutral) so each species lives where it should.
+func _scatter_plant(mesh: ArrayMesh, mat: Material, count: int, biome: String, prefer: String = "any") -> void:
 	var half := terrain.world_size * 0.5 - 4.0
 	var xforms: Array[Transform3D] = []
 	for i in count:
@@ -529,6 +651,15 @@ func _scatter_plant(mesh: ArrayMesh, mat: Material, count: int, biome: String) -
 				if above < 0.8:
 					continue
 		if Vector2(x, z).distance_to(player_start) < 4.0:
+			continue
+		# Density preference by biome field.
+		var fd := _forest_density(x, z)
+		var w := 1.0
+		if prefer == "forest":
+			w = clampf(fd * 1.35, 0.06, 1.0)
+		elif prefer == "open":
+			w = clampf((1.0 - fd) * 1.35, 0.06, 1.0)
+		if _rng.randf() > w:
 			continue
 		var sc := _rng.randf_range(0.6, 1.1)
 		var basis := Basis.from_euler(Vector3(0.0, _rng.randf_range(0.0, TAU), 0.0)).scaled(Vector3(sc, sc, sc))
