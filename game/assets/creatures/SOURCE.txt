@@ -1,2 +1,5 @@
 Quaternius Animated Dinosaur Bundle (CC0) — from poly.pizza. Free for commercial use.
 Animations per model: Idle, Walk, Run, Attack, Jump, Death.
+
+black bear (bear.glb) — 'Bear' by madtrollstudio, CC-BY, via poly.pizza/m/kLLBpmcw0w
+whitetail deer (deer.glb) — Quaternius 'Ultimate Animated Animals' (CC0), via poly.pizza. Free for commercial use.

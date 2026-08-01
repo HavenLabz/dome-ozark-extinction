@@ -180,6 +180,10 @@ func _capture_screenshot() -> void:
 # ---------------------------------------------------------------------------
 
 func _scatter_forest() -> void:
+	# Real CC0 tree models (Quaternius) when imported; procedural fallback otherwise.
+	var oak_scene: PackedScene = load("res://assets/environment/oak.glb") if ResourceLoader.exists("res://assets/environment/oak.glb") else null
+	var pine_scene: PackedScene = load("res://assets/environment/pine.glb") if ResourceLoader.exists("res://assets/environment/pine.glb") else null
+
 	var half := terrain.world_size * 0.5 - 4.0
 	for i in tree_count:
 		var x := _rng.randf_range(-half, half)
@@ -193,9 +197,60 @@ func _scatter_forest() -> void:
 		# Real Ozark forest is oak-hickory dominant with shortleaf pine mixed in.
 		var scale := _rng.randf_range(0.8, 1.5)
 		if _rng.randf() < 0.62:
-			nav_region.add_child(_make_broadleaf_tree(p, scale))
+			if oak_scene:
+				nav_region.add_child(_make_glb_tree(p, oak_scene, 11.0 * scale, 0.45 * scale))
+			else:
+				nav_region.add_child(_make_broadleaf_tree(p, scale))
 		else:
-			nav_region.add_child(_make_tree(p, scale))
+			if pine_scene:
+				nav_region.add_child(_make_glb_tree(p, pine_scene, 12.0 * scale, 0.35 * scale))
+			else:
+				nav_region.add_child(_make_tree(p, scale))
+
+
+## Instance a real tree GLB, auto-fit it to target_h, drop it on the ground, and
+## give it a simple trunk collider so the player and creatures can't walk through.
+func _make_glb_tree(base: Vector3, scene: PackedScene, target_h: float, trunk_radius: float) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	body.position = base
+	body.rotation.y = _rng.randf_range(0.0, TAU)
+
+	var model := scene.instantiate()
+	body.add_child(model)
+
+	# Measure the model in its own local space (no need to be in the tree yet).
+	var acc := {}
+	_accum_aabb(model, Transform3D.IDENTITY, acc)
+	var box: AABB = acc.get("b", AABB(Vector3.ZERO, Vector3.ONE))
+	var h := maxf(0.05, box.size.y)
+	var s := target_h / h
+	if model is Node3D:
+		(model as Node3D).scale = Vector3(s, s, s)
+		# Sit the model's lowest point exactly on the ground.
+		(model as Node3D).position.y = -box.position.y * s
+
+	var col := CollisionShape3D.new()
+	var shape := CylinderShape3D.new()
+	shape.radius = trunk_radius
+	shape.height = target_h
+	col.shape = shape
+	col.position.y = target_h * 0.5
+	body.add_child(col)
+	return body
+
+
+## Recursively merge every child mesh's AABB into acc["b"], in root-local space.
+func _accum_aabb(node: Node, xf: Transform3D, acc: Dictionary) -> void:
+	var local_xf := xf
+	if node is Node3D:
+		local_xf = xf * (node as Node3D).transform
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
+		var box: AABB = local_xf * (node as MeshInstance3D).mesh.get_aabb()
+		acc["b"] = (acc["b"] as AABB).merge(box) if acc.has("b") else box
+	for c in node.get_children():
+		_accum_aabb(c, local_xf, acc)
 
 
 func _make_tree(base: Vector3, scale: float) -> StaticBody3D:

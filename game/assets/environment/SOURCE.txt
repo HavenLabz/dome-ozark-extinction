@@ -1,0 +1,4 @@
+Environment models — real Ozark forest trees (CC0), from poly.pizza. Free for commercial use.
+
+pine.glb — Quaternius conifer / pine tree (CC0).
+oak.glb  — Quaternius 'NormalTree' broadleaf/oak (CC0).

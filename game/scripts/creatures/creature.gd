@@ -424,7 +424,13 @@ const MODEL_PATHS := {
 	&"stegosaurus": "res://assets/creatures/stegosaurus.glb",
 	&"allosaurus": "res://assets/creatures/trex.glb",
 	&"spinosaurus": "res://assets/creatures/trex.glb",
+	# Real modern Ozark fauna (CC0).
+	&"whitetail_deer": "res://assets/creatures/deer.glb",
+	&"black_bear": "res://assets/creatures/bear.glb",
 }
+
+## Species whose models ship with their own textures — never tint these.
+const REAL_FAUNA := [&"whitetail_deer", &"black_bear"]
 
 
 func _build_visual() -> void:
@@ -439,12 +445,33 @@ func _build_visual() -> void:
 		_model = scene.instantiate()
 		add_child(_model)
 		_anim = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+		# Dinosaurs import as flat, untextured meshes — tint them their species
+		# colour for variety. Real Ozark fauna (deer/bear/etc.) ship with their
+		# own textures, so leave those alone.
+		if not REAL_FAUNA.has(data.species_id):
+			_tint_model(data.placeholder_color)
 		_fit_model()
 		_play_anim("Idle")
 		return
 	_rig = CreatureRig.new()
 	add_child(_rig)
 	_rig.build(data)
+
+
+## Tint an imported model with the species colour (they import flat grey).
+## A darker belly-ish variant would need per-surface data; one tone reads clean.
+func _tint_model(color: Color) -> void:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.85
+	for n in _model.find_children("*", "MeshInstance3D", true, false):
+		var mi := n as MeshInstance3D
+		if mi.mesh == null:
+			continue
+		# Fresh imports have no override materials, so iterate the mesh's own
+		# surfaces and override each one.
+		for s in mi.mesh.get_surface_count():
+			mi.set_surface_override_material(s, mat)
 
 
 ## Scale a real model to the species size, sit it on the ground, and face -Z.
