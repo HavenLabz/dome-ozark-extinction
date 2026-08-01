@@ -38,6 +38,8 @@ var _optics: Array = []         # attachment slots: {name, fov, scoped}
 var _optic_idx: int = 0
 var _kick_pos: Vector3 = Vector3.ZERO
 var _kick_rot: float = 0.0
+var _mag: MeshInstance3D         # the magazine, animated during reload
+var _mag_rest: Vector3           # its resting local position
 var _rng := RandomNumberGenerator.new()
 
 
@@ -49,6 +51,8 @@ func _ready() -> void:
 	_reserve = data.reserve_ammo
 	_spread = data.spread_base
 	_build_viewmodel()
+	if _mag:
+		_mag_rest = _mag.position
 	call_deferred("_emit_ammo")
 
 
@@ -70,9 +74,28 @@ func _process(delta: float) -> void:
 	_kick_pos = _kick_pos.lerp(Vector3.ZERO, clampf(delta * 12.0, 0.0, 1.0))
 	_kick_rot = lerpf(_kick_rot, 0.0, clampf(delta * 12.0, 0.0, 1.0))
 	# Blend between hip-fire and aim-down-sights (weapon pulls to screen center).
-	_aim_blend = move_toward(_aim_blend, 1.0 if _ads_active else 0.0, delta * 10.0)
-	position = _rest_pos.lerp(_ads_pos, _aim_blend) + _kick_pos
-	rotation.x = _kick_rot
+	# Can't aim while reloading — the gun is dropped out of the sight line.
+	var want_ads := _ads_active and not _reloading
+	_aim_blend = move_toward(_aim_blend, 1.0 if want_ads else 0.0, delta * 10.0)
+
+	# Visible reload: the gun dips down and tilts while the magazine drops out
+	# and a fresh one seats — so a reload always reads on screen.
+	var reload_dip := Vector3.ZERO
+	var reload_tilt := 0.0
+	if _reloading and data.reload_time > 0.0:
+		var p := clampf(1.0 - _reload_t / data.reload_time, 0.0, 1.0)  # 0..1
+		var swing := sin(p * PI)                                       # up at the middle
+		reload_dip = Vector3(0.0, -0.14 * swing, 0.02 * swing)
+		reload_tilt = 0.6 * swing
+		if _mag:
+			# Mag drops away in the first half, new one seats in the second.
+			var drop := sin(clampf(p, 0.0, 0.5) / 0.5 * PI) if p < 0.5 else sin((1.0 - p) / 0.5 * PI)
+			_mag.position = _mag_rest + Vector3(0.0, -0.18 * drop, 0.0)
+	elif _mag:
+		_mag.position = _mag_rest
+
+	position = _rest_pos.lerp(_ads_pos, _aim_blend) + _kick_pos + reload_dip
+	rotation.x = _kick_rot + reload_tilt
 
 	# Muzzle flash timeout.
 	if _flash_t > 0.0:
@@ -275,30 +298,35 @@ func _build_viewmodel() -> void:
 
 	if data.body_style == "PISTOL":
 		_rest_pos = Vector3(0.22, -0.20, -0.45)
-		# ADS: centered so the slide sits on the screen axis (sights up).
-		_ads_pos = Vector3(0.0, -0.045, -0.30)
+		# ADS: drop the slide low so the target sits above it, front post centred.
+		_ads_pos = Vector3(0.0, -0.09, -0.28)
 		_part(Vector3(0.052, 0.072, 0.30), Vector3(0, 0.03, -0.03), metal)    # slide
 		_part(Vector3(0.05, 0.05, 0.20), Vector3(0, 0.0, -0.10), metal)       # frame/dust cover
-		_part(Vector3(0.048, 0.13, 0.07), Vector3(0, -0.085, 0.055), polymer) # grip
+		_mag = _part(Vector3(0.048, 0.13, 0.07), Vector3(0, -0.085, 0.055), polymer) # grip+mag
 		_part(Vector3(0.05, 0.028, 0.11), Vector3(0, -0.028, 0.015), polymer) # trigger guard
-		_part(Vector3(0.012, 0.02, 0.012), Vector3(0, 0.076, -0.16), metal)   # front sight
-		_part(Vector3(0.03, 0.02, 0.012), Vector3(0, 0.076, 0.10), metal)     # rear sight
+		_part(Vector3(0.008, 0.022, 0.008), Vector3(0, 0.078, -0.16), metal)  # front sight post
+		_part(Vector3(0.006, 0.02, 0.008), Vector3(-0.014, 0.072, 0.10), metal)  # rear notch L
+		_part(Vector3(0.006, 0.02, 0.008), Vector3(0.014, 0.072, 0.10), metal)   # rear notch R
 		_muzzle = _point(Vector3(0, 0.03, -0.19))
 		# Two-handed pistol grip: firing hand on the grip, support hand cupped under.
 		_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
 	else:  # RIFLE
 		_rest_pos = Vector3(0.26, -0.22, -0.55)
-		# ADS: centered + a touch closer, receiver on the screen axis.
-		_ads_pos = Vector3(0.0, -0.05, -0.34)
+		# ADS: drop the gun low so you look OVER the receiver with the target
+		# clearly visible above it, front post centered on the aim axis.
+		_ads_pos = Vector3(0.0, -0.115, -0.30)
 		_part(Vector3(0.07, 0.09, 0.42), Vector3(0, 0, 0), body)             # receiver (tinted)
 		_part(Vector3(0.042, 0.042, 0.46), Vector3(0, 0.03, -0.42), metal)   # barrel
 		_part(Vector3(0.058, 0.055, 0.26), Vector3(0, 0.005, -0.30), furn)   # handguard
-		_part(Vector3(0.055, 0.15, 0.085), Vector3(0, -0.125, 0.05), polymer)# magazine
+		_mag = _part(Vector3(0.055, 0.15, 0.085), Vector3(0, -0.125, 0.05), polymer)  # magazine
 		_part(Vector3(0.05, 0.11, 0.07), Vector3(0, -0.095, 0.14), polymer)  # pistol grip
 		_part(Vector3(0.062, 0.10, 0.22), Vector3(0, -0.005, 0.31), furn)    # stock
-		_part(Vector3(0.03, 0.022, 0.32), Vector3(0, 0.072, -0.06), polymer) # top rail
-		_part(Vector3(0.012, 0.026, 0.012), Vector3(0, 0.10, -0.34), metal)  # front sight post
-		_part(Vector3(0.036, 0.026, 0.012), Vector3(0, 0.10, 0.15), metal)   # rear aperture
+		_part(Vector3(0.028, 0.016, 0.30), Vector3(0, 0.062, -0.06), polymer)# low top rail
+		# Iron sights: a thin front post centred on the aim axis, and a rear
+		# notch (two posts with a gap) you look THROUGH — not a solid block.
+		_part(Vector3(0.007, 0.032, 0.007), Vector3(0, 0.086, -0.40), metal) # front sight post
+		_part(Vector3(0.006, 0.028, 0.008), Vector3(-0.017, 0.078, 0.15), metal)  # rear notch L
+		_part(Vector3(0.006, 0.028, 0.008), Vector3(0.017, 0.078, 0.15), metal)   # rear notch R
 		_muzzle = _point(Vector3(0, 0.03, -0.62))
 		# Support hand on the handguard, firing hand on the grip.
 		_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)

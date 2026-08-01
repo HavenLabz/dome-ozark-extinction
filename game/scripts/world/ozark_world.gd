@@ -180,6 +180,9 @@ func _capture_screenshot() -> void:
 		if "--ads" in args:
 			var pl := get_tree().get_first_node_in_group("player")
 			if pl and pl.has_method("get_active_weapon"):
+				# Stop the controller re-reading input so the forced ADS sticks.
+				pl.set_process(false)
+				pl.set_physics_process(false)
 				var wpn = pl.get_active_weapon()
 				if wpn:
 					wpn.set_ads(true)
