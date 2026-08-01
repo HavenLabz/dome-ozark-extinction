@@ -191,6 +191,8 @@ func _handle_weapons(delta: float) -> void:
 	camera.fov = lerpf(camera.fov, ads_fov if _ads else default_fov, clampf(delta * 12.0, 0.0, 1.0))
 
 	var w := _current_weapon()
+	if w != null:
+		w.set_ads(_ads)   # raise/lower the sights on the viewmodel
 	if w != null and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var wants_fire := false
 		if w.data.fire_mode == WeaponData.FireMode.AUTO:

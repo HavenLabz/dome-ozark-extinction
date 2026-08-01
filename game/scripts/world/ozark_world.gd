@@ -51,6 +51,8 @@ func _ready() -> void:
 	_build_water()
 	_build_structure(Vector2(-30.0, -25.0))
 	_build_resource_cache(Vector2(-24.0, -20.0))
+	_build_bluffs()
+	_build_cave(Vector2(95.0, -70.0))
 	_build_campfires()
 	_add_birds()
 
@@ -107,6 +109,13 @@ func _capture_screenshot() -> void:
 
 	# Weapon shot: use the player's own camera (which holds the viewmodel).
 	if "--shotweapon" in args:
+		if "--ads" in args:
+			var pl := get_tree().get_first_node_in_group("player")
+			if pl and pl.has_method("get_active_weapon"):
+				var wpn = pl.get_active_weapon()
+				if wpn:
+					wpn.set_ads(true)
+				pl.get_node("Head/Camera3D").fov = 50.0
 		await get_tree().create_timer(2.5).timeout
 		var img_w := get_viewport().get_texture().get_image()
 		img_w.save_png(path)
@@ -436,6 +445,58 @@ func _build_resource_cache(at: Vector2) -> void:
 	_add_box(crate, Vector3(1.2, 1.2, 1.2), Vector3(0, 0.6, 0),
 			_solid_mat(Color(0.5, 0.42, 0.2)))
 	add_child(crate)
+
+
+## Limestone bluffs — the Ozarks' eroded dolomite/limestone outcrops (the
+## region's "mountains"). Stacked, tapering strata of pale rock.
+func _build_bluffs() -> void:
+	var rock := _solid_mat(Color(0.62, 0.60, 0.54))
+	rock.roughness = 1.0
+	var spots := [Vector2(95, 45), Vector2(-130, 90), Vector2(140, -100),
+		Vector2(-90, -140), Vector2(45, 160), Vector2(-160, -40)]
+	for at in spots:
+		var g := terrain.surface_point(at.x, at.y)
+		var bluff := StaticBody3D.new()
+		bluff.collision_layer = 1
+		bluff.position = g
+		var w := _rng.randf_range(10.0, 20.0)
+		var cum := 0.0
+		for i in _rng.randi_range(3, 5):
+			var h := _rng.randf_range(2.6, 4.6)
+			var t := i / 5.0
+			var sz := Vector3(w * (1.0 - t * 0.5), h, w * 0.7 * (1.0 - t * 0.4))
+			_add_box(bluff, sz, Vector3(_rng.randf_range(-1.5, 1.5), cum + h * 0.5 - 1.0,
+				_rng.randf_range(-1.5, 1.5)), rock)
+			cum += h
+		nav_region.add_child(bluff)   # navmesh routes creatures around it
+
+
+## A karst cave — the Ozarks are riddled with them ("The Cave State"). A rock
+## chamber with an entrance you can walk into, lit dimly for exploration.
+func _build_cave(at: Vector2) -> void:
+	var g := terrain.surface_point(at.x, at.y)
+	var cave := StaticBody3D.new()
+	cave.name = "Cave"
+	cave.collision_layer = 1
+	cave.position = g
+	var rock := _solid_mat(Color(0.5, 0.48, 0.44))
+	rock.roughness = 1.0
+	# Chamber walls (entrance gap faces -Z), roof, and an exterior mound.
+	_add_box(cave, Vector3(11, 5, 1.2), Vector3(0, 2.5, 5.5), rock)      # back
+	_add_box(cave, Vector3(1.2, 5, 11), Vector3(5.5, 2.5, 0), rock)      # right
+	_add_box(cave, Vector3(1.2, 5, 11), Vector3(-5.5, 2.5, 0), rock)     # left
+	_add_box(cave, Vector3(4.0, 5, 1.2), Vector3(-3.5, 2.5, -5.5), rock) # front-left
+	_add_box(cave, Vector3(4.0, 5, 1.2), Vector3(3.5, 2.5, -5.5), rock)  # front-right
+	_add_box(cave, Vector3(12, 1.2, 12), Vector3(0, 5.2, 0), rock)       # roof
+	_add_box(cave, Vector3(16, 7, 5), Vector3(0, 3.5, 8), rock)          # exterior mound
+	# Dim interior light so the cave is explorable.
+	var light := OmniLight3D.new()
+	light.position = Vector3(0, 3.0, 0)
+	light.light_color = Color(0.55, 0.68, 0.85)
+	light.light_energy = 1.6
+	light.omni_range = 14.0
+	cave.add_child(light)
+	nav_region.add_child(cave)
 
 
 ## Adds a visual box AND its collision box directly to `body`.

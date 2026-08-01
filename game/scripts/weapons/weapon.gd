@@ -25,7 +25,10 @@ var _muzzle: Node3D
 var _flash: MeshInstance3D
 var _flash_light: OmniLight3D
 var _flash_t: float = 0.0
-var _rest_pos: Vector3
+var _rest_pos: Vector3          # hip-fire viewmodel position (lower-right)
+var _ads_pos: Vector3           # aim-down-sights position (centered)
+var _ads_active: bool = false
+var _aim_blend: float = 0.0     # 0 = hip, 1 = ADS
 var _kick_pos: Vector3 = Vector3.ZERO
 var _kick_rot: float = 0.0
 var _rng := RandomNumberGenerator.new()
@@ -59,7 +62,9 @@ func _process(delta: float) -> void:
 	# Recover viewmodel kick.
 	_kick_pos = _kick_pos.lerp(Vector3.ZERO, clampf(delta * 12.0, 0.0, 1.0))
 	_kick_rot = lerpf(_kick_rot, 0.0, clampf(delta * 12.0, 0.0, 1.0))
-	position = _rest_pos + _kick_pos
+	# Blend between hip-fire and aim-down-sights (weapon pulls to screen center).
+	_aim_blend = move_toward(_aim_blend, 1.0 if _ads_active else 0.0, delta * 10.0)
+	position = _rest_pos.lerp(_ads_pos, _aim_blend) + _kick_pos
 	rotation.x = _kick_rot
 
 	# Muzzle flash timeout.
@@ -94,6 +99,11 @@ func reload() -> void:
 	_reloading = true
 	_reload_t = data.reload_time
 	reload_started.emit(data.reload_time)
+
+
+## Player calls this each frame to raise/lower the sights.
+func set_ads(on: bool) -> void:
+	_ads_active = on
 
 
 func current_spread(ads: bool) -> float:
@@ -166,11 +176,15 @@ func _build_viewmodel() -> void:
 
 	if data.body_style == "PISTOL":
 		_rest_pos = Vector3(0.22, -0.20, -0.45)
+		# ADS: centered so the slide sits on the screen axis (sights up).
+		_ads_pos = Vector3(0.0, -0.045, -0.30)
 		_part(Vector3(0.07, 0.09, 0.28), Vector3(0, 0.02, -0.02), mat)      # slide
 		_part(Vector3(0.06, 0.16, 0.08), Vector3(0, -0.10, 0.06), mat)      # grip
 		_muzzle = _point(Vector3(0, 0.03, -0.18))
 	else:  # RIFLE
 		_rest_pos = Vector3(0.26, -0.22, -0.55)
+		# ADS: centered + a touch closer, receiver on the screen axis.
+		_ads_pos = Vector3(0.0, -0.05, -0.34)
 		_part(Vector3(0.08, 0.10, 0.42), Vector3(0, 0, 0), mat)             # receiver
 		_part(Vector3(0.05, 0.05, 0.40), Vector3(0, 0.02, -0.36), mat)      # barrel/handguard
 		_part(Vector3(0.06, 0.16, 0.09), Vector3(0, -0.12, 0.05), mat)      # magazine
