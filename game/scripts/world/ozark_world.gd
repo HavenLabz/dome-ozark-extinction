@@ -156,6 +156,7 @@ func _ready() -> void:
 	await _stage("Releasing the wildlife")
 	_place_player()
 	_spawn_wildlife()
+	_spawn_ambush()
 	_end_loading()
 
 	# 5. The dome's own weather ecosystem — wind, rain, storms, floods, tornadoes.
@@ -290,6 +291,19 @@ func _capture_screenshot() -> void:
 # ---------------------------------------------------------------------------
 # Forest
 # ---------------------------------------------------------------------------
+
+## The signature burrowing ambush apex — one lurks under the dome, hunting by
+## sound. Spawns underground, far from the landing zone.
+func _spawn_ambush() -> void:
+	var stalker := AmbushStalker.new()
+	stalker.setup(terrain)
+	creatures_root.add_child(stalker)
+	var half := terrain.world_size * 0.5 - 30.0
+	var x := _rng.randf_range(-half, half)
+	var z := _rng.randf_range(-half, half)
+	var p := terrain.surface_point(x, z)
+	stalker.global_position = Vector3(p.x, p.y - 6.0, p.z)
+
 
 ## Hidden supply caches tucked in the deep woods — find them all for the
 ## legendary edge. Placed in dense cover, well away from the landing zone.
