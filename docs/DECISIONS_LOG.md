@@ -5,6 +5,28 @@ Permanent record of major technical, creative, and production decisions.
 
 ---
 
+### 2026-08-01 — Navigation: dedicated per-dome map (SUPERSEDES 07-31 fallback)
+
+| Field | Content |
+|-------|--------|
+| **Decision** | Each dome creates its own `NavigationServer3D` map (`OzarkWorld.nav_map`) at runtime, bakes the region navmesh onto it, and points creature agents at it via `Creature.use_navigation_map()`. Navmesh routing is now the primary locomotion; direct-steering stays as a safety net |
+| **Reason** | The scene's shared world navigation map silently refused the runtime-baked region's polygons (never entered the query structure) — root-caused via minimal-repro isolation. A dedicated map accepts the same navmesh and syncs in ~20 physics frames. Bonus: a nav map per dome is cleaner modular architecture, matching the dome-content-pack rule |
+| **Alternatives rejected** | Fighting the shared world map further; shipping on the direct-steering fallback alone (loses obstacle-aware routing) |
+| **Impact** | Creatures path around trees/ruins on real navmesh; QA task GAME-5 closed; pattern reused for every future dome |
+
+---
+
+### 2026-08-01 — Art direction: zero-cost procedural stylized visuals
+
+| Field | Content |
+|-------|--------|
+| **Decision** | First art pass is fully procedural/shader-based (no purchased assets): slope/height terrain shader, animated water, wind-swayed trees + grass (MultiMesh), stylized procedural creature rigs (sauropod/theropod) with speed-driven leg/tail animation, ambient birds, AgX + glow + volumetric-fog environment |
+| **Reason** | North Star: creature quality is the selling point AND zero-cost-until-necessary. Procedural stylized look ships an attractive world now and reads clearly as a prehistoric forest with recognizable dinosaurs, while leaving the architecture ready for sculpted/skinned models to drop in without touching AI |
+| **Alternatives rejected** | Buying/importing model packs (violates zero-cost); staying on block placeholders (fails the visual-quality bar the founder asked for) |
+| **Impact** | Rigs are the seed silhouettes; final sculpted + skeletally-animated creatures replace `CreatureRig` later. Shaders live in `game/shaders/` |
+
+---
+
 ### 2026-07-31 — Creature AI architecture: data-driven single-script FSM
 
 | Field | Content |
@@ -26,7 +48,10 @@ Permanent record of major technical, creative, and production decisions.
 
 ---
 
-### 2026-07-31 — Creature locomotion: navmesh-with-direct-steering fallback
+### 2026-07-31 — Creature locomotion: navmesh-with-direct-steering fallback  ⟶ SUPERSEDED 2026-08-01
+
+> **Superseded:** the navmesh sync bug is fixed (dedicated per-dome map, see the 2026-08-01 entry). Navmesh routing is now primary; direct steering remains only as a safety net.
+
 
 | Field | Content |
 |-------|--------|
