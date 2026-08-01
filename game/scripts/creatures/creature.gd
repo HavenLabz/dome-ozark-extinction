@@ -38,6 +38,8 @@ var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
 var _rng := RandomNumberGenerator.new()
 var _rig: CreatureRig
 var _model: Node3D          # set instead of _rig when data.model_scene is used
+var _track_accum: float = 0.0
+var _last_track_pos: Vector3
 
 
 func _ready() -> void:
@@ -47,6 +49,7 @@ func _ready() -> void:
 		data = CreatureData.new()
 	_health = data.max_health
 	_home = global_position
+	_last_track_pos = global_position
 	perception.configure(data)
 	_build_visual()
 	# Defer initial navmesh sync so the region is ready on the first frame.
@@ -81,6 +84,8 @@ func _physics_process(delta: float) -> void:
 
 	if _rig:
 		_rig.animate(Vector2(velocity.x, velocity.z).length(), delta)
+
+	_maybe_drop_track(delta)
 
 
 # ---------------------------------------------------------------------------
@@ -289,6 +294,39 @@ func _steer_along_path(speed: float, delta: float) -> void:
 	velocity.x = dir.x * speed
 	velocity.z = dir.z * speed
 	_face_toward(global_position + dir, delta)
+
+
+func _maybe_drop_track(_delta: float) -> void:
+	if not is_on_floor():
+		return
+	var flat := Vector2(global_position.x - _last_track_pos.x, global_position.z - _last_track_pos.z)
+	_track_accum += flat.length()
+	_last_track_pos = global_position
+	var spacing := maxf(1.2, data.body_size.z * 0.55)
+	if _track_accum >= spacing and Vector2(velocity.x, velocity.z).length() > 0.5:
+		_track_accum = 0.0
+		_spawn_track()
+
+
+## Leaves a fading footprint the player can track (hunting depth).
+func _spawn_track() -> void:
+	var fp := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	var sz := clampf(data.body_size.x * 0.5, 0.2, 1.1)
+	q.size = Vector2(sz, sz * 1.6)
+	fp.mesh = q
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.12, 0.09, 0.06, 0.75)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fp.material_override = mat
+	get_parent().add_child(fp)
+	fp.global_position = global_position + Vector3.UP * 0.04
+	fp.rotation = Vector3(-PI * 0.5, rotation.y, 0.0)
+	# Fade out and self-remove so tracks read as fresh vs. old.
+	var tw := fp.create_tween()
+	tw.tween_interval(20.0)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 8.0)
+	tw.tween_callback(fp.queue_free)
 
 
 func _face_toward(world_point: Vector3, delta: float) -> void:
