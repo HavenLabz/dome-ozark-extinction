@@ -35,6 +35,25 @@ var _water_level: float = -1.5
 ## across the map instead of being a uniform sprinkle.
 var _forest_noise := FastNoiseLite.new()
 var _moist_noise := FastNoiseLite.new()
+## Foliage materials whose sway the weather system scales for wind.
+## Each entry: {mat: ShaderMaterial, base: float}.
+var _wind_mats: Array = []
+var _water_node: MeshInstance3D          # so weather can raise it in a flood
+var _bird_flock: BirdFlock               # so weather can ground the birds
+
+
+## Register a foliage material so the weather system can drive its wind sway.
+func _register_wind_material(mat: ShaderMaterial) -> void:
+	_wind_mats.append({"mat": mat, "base": float(mat.get_shader_parameter("sway_strength"))})
+
+
+## Called by WeatherManager each frame: scale every foliage material's sway by
+## the current wind, so grass and trees bend harder as the wind picks up.
+func set_wind(strength_mult: float, speed_mult: float) -> void:
+	for e in _wind_mats:
+		var m: ShaderMaterial = e["mat"]
+		m.set_shader_parameter("sway_strength", e["base"] * strength_mult)
+		m.set_shader_parameter("sway_speed", 1.6 * speed_mult)
 
 
 func _ready() -> void:
@@ -79,12 +98,31 @@ func _ready() -> void:
 	_place_player()
 	_spawn_wildlife()
 
+	# 5. The dome's own weather ecosystem — wind, rain, storms, floods, tornadoes.
+	_setup_weather()
+
 	# Headless self-check: run with `-- --smoke` to print a report and quit.
 	if "--smoke" in OS.get_cmdline_user_args():
 		get_tree().create_timer(3.0).timeout.connect(_smoke_report)
 	# Beauty-shot capture: run with `-- --shot <path>` to save a PNG and quit.
 	if "--shot" in OS.get_cmdline_user_args():
 		_capture_screenshot()
+
+
+## Build the weather system and hand it the scene refs it drives.
+func _setup_weather() -> void:
+	var wm := WeatherManager.new()
+	wm.name = "Weather"
+	add_child(wm)
+	var dn := get_node_or_null("DayNight") as DayNightCycle
+	var s := get_node_or_null("DirectionalLight3D") as DirectionalLight3D
+	var we := get_node_or_null("WorldEnvironment") as WorldEnvironment
+	var pl := get_node_or_null("Player") as Node3D
+	var environment: Environment = we.environment if we else null
+	wm.setup(self, dn, environment, s, pl, _water_node, _bird_flock, _water_level)
+	# Debug: `-- --shotstorm` forces a full storm for screenshots.
+	if "--shotstorm" in OS.get_cmdline_user_args():
+		wm.force_storm()
 
 
 func _capture_screenshot() -> void:
@@ -229,6 +267,8 @@ func _scatter_forest() -> void:
 	var decid_mat := _make_foliage_material(Color.WHITE, Color.WHITE)
 	decid_mat.set_shader_parameter("height_ref", 8.0)
 	decid_mat.set_shader_parameter("sway_strength", 0.16)
+	_register_wind_material(conifer_mat)
+	_register_wind_material(decid_mat)
 
 	var bark_mat := _solid_mat(Color(0.24, 0.17, 0.11))
 	bark_mat.roughness = 0.95
@@ -515,6 +555,7 @@ func _scatter_grass(clump_count: int = 80000) -> void:
 	mat.set_shader_parameter("sway_strength", 0.05)
 	mat.set_shader_parameter("sky_lit", 1.0)   # skylit so grass reads lush, not black
 	blade.surface_set_material(0, mat)
+	_register_wind_material(mat)
 
 	var half := terrain.world_size * 0.5 - 4.0
 	var xforms: Array[Transform3D] = []
@@ -859,6 +900,7 @@ func _add_birds() -> void:
 	flock.name = "Birds"
 	flock.center = Vector3(0, 34, 0)
 	add_child(flock)
+	_bird_flock = flock
 
 
 ## Rounded broadleaf (oak/hickory) with occasional autumn color — the Ozark
@@ -957,6 +999,7 @@ func _build_water() -> void:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		water.material_override = m
 	add_child(water)
+	_water_node = water
 
 	# A drinkable spot at the lowest nearby ground — a real, working interaction.
 	var low := _find_low_point()

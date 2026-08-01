@@ -12,6 +12,10 @@ var _birds: Array[Node3D] = []
 var _params: Array[Dictionary] = []   # per-bird orbit params
 var _rng := RandomNumberGenerator.new()
 var _t := 0.0
+## 0 = circling overhead, 1 = grounded/perched. WeatherManager raises this in
+## bad weather so the flock drops to the ground and stops flapping.
+var shelter: float = 0.0
+var _shelter_smooth: float = 0.0
 
 
 func _ready() -> void:
@@ -38,6 +42,7 @@ func _ready() -> void:
 			"phase": _rng.randf_range(0.0, TAU),
 			"height": _rng.randf_range(-6.0, 8.0),
 			"flap": _rng.randf_range(6.0, 9.0),
+			"perch": _rng.randf_range(0.0, 1.5),
 		})
 
 
@@ -56,17 +61,24 @@ func _wing(bird: Node3D, mat: Material, side: float) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_shelter_smooth = move_toward(_shelter_smooth, clampf(shelter, 0.0, 1.0), delta * 0.4)
+	var grounded := _shelter_smooth
 	for i in _birds.size():
 		var p: Dictionary = _params[i]
-		var ang: float = p.phase + _t * p.speed
-		var r: float = p.radius
-		var pos := center + Vector3(cos(ang) * r, p.height + sin(_t * 0.5 + p.phase) * 2.0, sin(ang) * r)
+		# Slow the orbit to a near-stop as the birds come down to shelter.
+		var ang: float = p.phase + _t * p.speed * lerpf(1.0, 0.0, grounded)
+		var r: float = p.radius   # keep spread out; birds land where they were, not in a pile
+		var fly_y: float = p.height + sin(_t * 0.5 + p.phase) * 2.0
+		# Perch just above the ground when sheltering.
+		var perch_y: float = -center.y + 1.2 + p.perch
+		var y: float = lerpf(fly_y, perch_y, grounded)
+		var pos := center + Vector3(cos(ang) * r, y, sin(ang) * r)
 		var bird := _birds[i]
 		bird.global_position = pos
 		# Face along the tangent of the circle.
 		var tangent := Vector3(-sin(ang), 0, cos(ang)) * signf(p.speed)
 		bird.look_at(pos + tangent, Vector3.UP)
-		# Flap the wings.
-		var flap: float = sin(_t * p.flap + p.phase) * 0.6
+		# Flap normally in flight; fold the wings when perched.
+		var flap: float = sin(_t * p.flap + p.phase) * 0.6 * lerpf(1.0, 0.05, grounded)
 		bird.get_node("WingL").rotation.z = -flap
 		bird.get_node("WingR").rotation.z = flap

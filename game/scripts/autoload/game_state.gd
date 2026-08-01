@@ -35,6 +35,10 @@ var trophies_collected: Array[StringName] = []
 var trophy_score: int = 0
 var is_extraction_available: bool = false
 
+## Weather severity 0 (clear) .. 1 (full storm), set by WeatherManager each
+## frame. Wildlife reads this to decide whether to shelter / hunker down.
+var storm_intensity: float = 0.0
+
 # --- Survival ---
 # Tuned to real-wilderness pacing: you're dropped in the wild, not on a timer.
 # Thirst is the first real concern (~21 min from full to empty), hunger far

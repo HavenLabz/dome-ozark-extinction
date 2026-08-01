@@ -437,6 +437,9 @@ func _enter_state(new_state: State) -> void:
 				_idle_wait = _rng.randf_range(4.0, 9.0)
 			else:
 				_idle_wait = _rng.randf_range(1.5, 4.0)
+			# In bad weather, wildlife hunkers down instead of roaming.
+			if GameState.storm_intensity > 0.6:
+				_idle_wait *= 2.5
 			_play_anim("Idle")
 		State.WANDER:
 			_pick_wander_target()

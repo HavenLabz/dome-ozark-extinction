@@ -10,6 +10,9 @@ class_name DayNightCycle
 @export var env_path: NodePath = ^"../WorldEnvironment"
 
 var time_of_day: float = 0.42   # 0=midnight, .25=sunrise, .5=noon, .75=sunset
+## Set by WeatherManager: 0 clear .. ~0.8 heavy storm. Dims the sun + ambient so
+## storms genuinely darken the world.
+var storm_darkness: float = 0.0
 
 @onready var _sun: DirectionalLight3D = get_node_or_null(sun_path)
 @onready var _we: WorldEnvironment = get_node_or_null(env_path)
@@ -43,17 +46,18 @@ func _apply() -> void:
 	var day := clampf(elev, 0.0, 1.0)          # 0 night .. 1 noon
 	var horizon := clampf(1.0 - absf(elev) * 3.0, 0.0, 1.0)  # peaks at dawn/dusk
 
+	var storm_dim := 1.0 - clampf(storm_darkness, 0.0, 0.85)
 	if _sun:
 		# Arc the sun east→west and drop it below the horizon at night.
 		var azimuth := time_of_day * TAU
 		_sun.rotation = Vector3(deg_to_rad(-elev * 75.0 - 4.0), azimuth, 0.0)
-		_sun.light_energy = lerpf(0.06, 1.6, day)      # moonlight .. bright noon
+		_sun.light_energy = lerpf(0.06, 1.6, day) * storm_dim   # moonlight .. bright noon
 		_sun.light_color = _day_sun.lerp(_dusk_sun, horizon)
 		_sun.shadow_enabled = day > 0.02
 
 	if _we and _we.environment:
 		var env := _we.environment
-		env.ambient_light_energy = lerpf(0.14, 0.6, day)
+		env.ambient_light_energy = lerpf(0.14, 0.6, day) * lerpf(1.0, 0.55, storm_darkness)
 		env.ambient_light_color = Color(0.35, 0.42, 0.6).lerp(Color(0.6, 0.66, 0.66), day)
 		env.fog_density = lerpf(0.006, 0.0009, day)     # foggier at night
 		env.fog_light_color = Color(0.18, 0.22, 0.34).lerp(Color(0.7, 0.8, 0.92), day)
