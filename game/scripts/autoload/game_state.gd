@@ -36,9 +36,14 @@ var trophy_score: int = 0
 var is_extraction_available: bool = false
 
 # --- Survival ---
-const HUNGER_DRAIN := 0.30       # per second
-const HYDRATION_DRAIN := 0.45
-const STARVE_DAMAGE := 2.5       # per second at 0 food/water
+# Tuned to real-wilderness pacing: you're dropped in the wild, not on a timer.
+# Thirst is the first real concern (~21 min from full to empty), hunger far
+# slower (~33 min) — you can hunt and explore for a long stretch before either
+# bites. Hitting empty then weakens you gradually (grace to reach water), it
+# doesn't chunk your health away.
+const HUNGER_DRAIN := 0.05       # per second → ~33 min full→empty
+const HYDRATION_DRAIN := 0.08    # per second → ~21 min full→empty
+const STARVE_DAMAGE := 1.0       # per second at 0 food/water (~100s of grace)
 const HAVEN_HEAL := 4.0          # per second near a lit fire
 var survival_active: bool = true
 ## Set true by a lit campfire when the player is near: pauses drain and heals.

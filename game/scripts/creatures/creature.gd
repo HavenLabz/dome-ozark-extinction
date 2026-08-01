@@ -41,6 +41,12 @@ var _model: Node3D          # set instead of _rig when a real model is used
 var _anim: AnimationPlayer  # the model's animations, when present
 var _track_accum: float = 0.0
 var _last_track_pos: Vector3
+## Per-animal gait variation so a herd never moves in lockstep.
+var _speed_mult: float = 1.0
+## The ground speed the CURRENT gait animation is meant for. The model's leg
+## cycle is scaled to actual speed against this, so feet track the ground
+## (no foot-sliding). 0 = not a locomotion state (idle/attack), don't scale.
+var _anim_ref_speed: float = 0.0
 
 
 func _ready() -> void:
@@ -60,6 +66,7 @@ func _ready() -> void:
 func _post_ready() -> void:
 	_home = global_position          # now correctly positioned by the spawner
 	_last_track_pos = global_position
+	_speed_mult = _rng.randf_range(0.86, 1.14)
 	health_changed.emit(_health, data.max_health)
 	_enter_state(State.IDLE)
 
@@ -85,10 +92,22 @@ func _physics_process(delta: float) -> void:
 	_apply_gravity(delta)
 	move_and_slide()
 
+	var ground_speed := Vector2(velocity.x, velocity.z).length()
 	if _rig:
-		_rig.animate(Vector2(velocity.x, velocity.z).length(), delta)
+		_rig.animate(ground_speed, delta)
+	elif _anim:
+		_sync_gait(ground_speed)
 
 	_maybe_drop_track(delta)
+
+
+## Match the model's leg-cycle playback to how fast it's actually moving so the
+## feet grip the ground instead of skating. Idle/attack (ref 0) plays at 1x.
+func _sync_gait(ground_speed: float) -> void:
+	if _anim_ref_speed <= 0.01:
+		_anim.speed_scale = 1.0
+		return
+	_anim.speed_scale = clampf(ground_speed / _anim_ref_speed, 0.35, 2.2)
 
 
 # ---------------------------------------------------------------------------
@@ -136,9 +155,10 @@ func _find_player() -> Node3D:
 # States
 # ---------------------------------------------------------------------------
 
-func _tick_idle(_delta: float) -> void:
-	velocity.x = move_toward(velocity.x, 0.0, data.walk_speed)
-	velocity.z = move_toward(velocity.z, 0.0, data.walk_speed)
+func _tick_idle(delta: float) -> void:
+	var decel := data.walk_speed * 4.0 * delta
+	velocity.x = move_toward(velocity.x, 0.0, decel)
+	velocity.z = move_toward(velocity.z, 0.0, decel)
 	if _state_time >= _idle_wait:
 		_change_state(State.WANDER)
 
@@ -205,8 +225,9 @@ func _tick_hunt(delta: float) -> void:
 
 
 func _tick_attack(delta: float) -> void:
-	velocity.x = move_toward(velocity.x, 0.0, data.run_speed)
-	velocity.z = move_toward(velocity.z, 0.0, data.run_speed)
+	var decel := data.run_speed * 5.0 * delta
+	velocity.x = move_toward(velocity.x, 0.0, decel)
+	velocity.z = move_toward(velocity.z, 0.0, decel)
 	if _target == null:
 		_change_state(State.HUNT)
 		return
@@ -296,16 +317,28 @@ func _steer_along_path(speed: float, delta: float) -> void:
 			wp = p
 			break
 
+	var target_speed := speed * _speed_mult
 	var dir := wp - pos
 	dir.y = 0.0
 	if dir.length() < 0.4:
-		velocity.x = move_toward(velocity.x, 0.0, speed)
-		velocity.z = move_toward(velocity.z, 0.0, speed)
+		# Ease to a stop rather than halting on a dime.
+		var decel := target_speed * 3.5 * delta
+		velocity.x = move_toward(velocity.x, 0.0, decel)
+		velocity.z = move_toward(velocity.z, 0.0, decel)
 		return
 	dir = dir.normalized()
-	velocity.x = dir.x * speed
-	velocity.z = dir.z * speed
-	_face_toward(global_position + dir, delta)
+	# Turn first, then drive forward along the way we're actually facing, and only
+	# reach full speed once roughly aligned — animals slow through sharp turns
+	# instead of sliding sideways at top speed.
+	_face_toward(pos + dir, delta)
+	var facing := -global_transform.basis.z
+	facing.y = 0.0
+	facing = facing.normalized()
+	var align := clampf(facing.dot(dir), 0.0, 1.0)
+	var want := facing * target_speed * lerpf(0.45, 1.0, align)
+	var accel := target_speed / 0.35 * delta   # reach cruising speed in ~0.35s
+	velocity.x = move_toward(velocity.x, want.x, accel)
+	velocity.z = move_toward(velocity.z, want.z, accel)
 
 
 func _maybe_drop_track(_delta: float) -> void:
@@ -364,11 +397,18 @@ func _apply_gravity(delta: float) -> void:
 
 
 func _pick_wander_target() -> void:
-	# Sample a point inside the home territory so the animal stays local.
+	# Sample a point near the current spot so movement reads as short, natural
+	# steps — grazers browse in tight loops, others roam a bit wider — instead of
+	# marching in a straight line to the edge of the territory.
+	var step := 18.0 if data.diet == CreatureData.Diet.HERBIVORE else 32.0
 	var angle := _rng.randf_range(0.0, TAU)
-	var radius := _rng.randf_range(4.0, data.territory_radius)
+	var radius := _rng.randf_range(4.0, step)
 	var offset := Vector3(cos(angle), 0.0, sin(angle)) * radius
-	nav.target_position = _home + offset
+	# Keep it inside the home territory so animals don't drift off.
+	var goal := global_position + offset
+	if goal.distance_to(_home) > data.territory_radius:
+		goal = _home + (goal - _home).normalized() * data.territory_radius
+	nav.target_position = goal
 
 
 func _state_time_expired(seconds: float) -> bool:
@@ -389,16 +429,24 @@ func _change_state(new_state: State) -> void:
 func _enter_state(new_state: State) -> void:
 	_state = new_state
 	_state_time = 0.0
+	_anim_ref_speed = 0.0
 	match new_state:
 		State.IDLE:
-			_idle_wait = _rng.randf_range(1.5, 4.0)
+			# Grazers linger and browse; predators are restless and move on sooner.
+			if data.diet == CreatureData.Diet.HERBIVORE:
+				_idle_wait = _rng.randf_range(4.0, 9.0)
+			else:
+				_idle_wait = _rng.randf_range(1.5, 4.0)
 			_play_anim("Idle")
 		State.WANDER:
 			_pick_wander_target()
+			_anim_ref_speed = data.walk_speed
 			_play_anim("Walk")
 		State.INVESTIGATE:
+			_anim_ref_speed = data.walk_speed
 			_play_anim("Walk")
 		State.FLEE, State.HUNT:
+			_anim_ref_speed = data.run_speed
 			_play_anim("Run")
 		State.ATTACK:
 			_play_anim("Attack")

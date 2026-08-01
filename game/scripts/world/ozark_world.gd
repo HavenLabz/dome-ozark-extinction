@@ -300,28 +300,31 @@ func _make_tree(base: Vector3, scale: float) -> StaticBody3D:
 
 
 ## Dense wind-swayed grass via a single MultiMesh (one draw call).
-## Each tuft is a crossed pair of quads so it reads as grass from any angle.
-func _scatter_grass(blade_count: int = 45000) -> void:
-	var blade := _make_grass_tuft_mesh(0.28, 0.42)
-	var mat := _make_foliage_material(Color(0.24, 0.36, 0.13), Color(0.48, 0.66, 0.26))
-	mat.set_shader_parameter("height_ref", 0.42)
-	mat.set_shader_parameter("sway_strength", 0.06)
+## Each instance is a small clump of thin tapered blades — reads as real grass,
+## not flat cards. Density + per-clump size/tilt variation sell the field.
+func _scatter_grass(clump_count: int = 55000) -> void:
+	var blade := _make_grass_clump_mesh()
+	# Natural, slightly desaturated Ozark green (base darker, tips lit).
+	var mat := _make_foliage_material(Color(0.16, 0.26, 0.09), Color(0.38, 0.50, 0.19))
+	mat.set_shader_parameter("height_ref", 0.5)
+	mat.set_shader_parameter("sway_strength", 0.05)
 	mat.set_shader_parameter("sky_lit", 1.0)   # skylit so grass reads lush, not black
 	blade.surface_set_material(0, mat)
 
 	var half := terrain.world_size * 0.5 - 4.0
 	var xforms: Array[Transform3D] = []
-	for i in blade_count:
+	for i in clump_count:
 		var x := _rng.randf_range(-half, half)
 		var z := _rng.randf_range(-half, half)
 		var p := terrain.surface_point(x, z)
 		if p.y < _water_level + 0.6:
 			continue  # no grass in water
-		var sc := _rng.randf_range(0.6, 1.5)
-		# Small random tilt so blades don't read as uniform flat cards.
+		# Vary height and footprint per clump so the field isn't uniform.
+		var sc := _rng.randf_range(0.55, 1.35)
+		var wide := _rng.randf_range(0.85, 1.2)
 		var basis := Basis.from_euler(Vector3(
-			_rng.randf_range(-0.18, 0.18), _rng.randf_range(0.0, TAU),
-			_rng.randf_range(-0.18, 0.18))).scaled(Vector3(sc, sc, sc))
+			_rng.randf_range(-0.08, 0.08), _rng.randf_range(0.0, TAU),
+			_rng.randf_range(-0.08, 0.08))).scaled(Vector3(sc * wide, sc, sc * wide))
 		xforms.append(Transform3D(basis, p))  # base sits on the ground
 
 	var mm := MultiMesh.new()
@@ -338,18 +341,35 @@ func _scatter_grass(blade_count: int = 45000) -> void:
 	add_child(mmi)
 
 
-## Two perpendicular quads rising from y=0 to y=h — a grass tuft.
-func _make_grass_tuft_mesh(w: float, h: float) -> ArrayMesh:
+## A clump of several thin, tapered, slightly-bent blades fanning from the base.
+## The pointed tips (not rectangular tops) are what make it read as grass rather
+## than crossed cards. One shared mesh; per-clump variety comes from the instance
+## transform. Built once at load.
+func _make_grass_clump_mesh() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var quads := [
-		[Vector3(-w * 0.5, 0, 0), Vector3(w * 0.5, 0, 0), Vector3(w * 0.5, h, 0), Vector3(-w * 0.5, h, 0)],
-		[Vector3(0, 0, -w * 0.5), Vector3(0, 0, w * 0.5), Vector3(0, h, w * 0.5), Vector3(0, h, -w * 0.5)],
-	]
-	for q in quads:
-		for idx in [0, 1, 2, 0, 2, 3]:
-			st.set_uv(Vector2(0, 0))
-			st.add_vertex(q[idx])
+	var blades := 7
+	for i in blades:
+		var yaw := _rng.randf_range(0.0, TAU)
+		var off := Vector3(_rng.randf_range(-0.07, 0.07), 0.0, _rng.randf_range(-0.07, 0.07))
+		var h := _rng.randf_range(0.34, 0.55)
+		var bw := _rng.randf_range(0.035, 0.055)   # base width
+		var tw := 0.006                            # tip (near-point)
+		var lean := Vector3(sin(yaw), 0.0, cos(yaw)) * _rng.randf_range(0.06, 0.16) * h
+		var side := Vector3(cos(yaw), 0.0, -sin(yaw))
+		var mid := off + Vector3(0, h * 0.5, 0) + lean * 0.45
+		var tip := off + Vector3(0, h, 0) + lean
+		# Two stacked quads (base→mid, mid→tip) give the blade a gentle curve.
+		var b_l := off - side * bw * 0.5
+		var b_r := off + side * bw * 0.5
+		var m_l := mid - side * bw * 0.32
+		var m_r := mid + side * bw * 0.32
+		var t_l := tip - side * tw
+		var t_r := tip + side * tw
+		for tri in [[b_l, b_r, m_r], [b_l, m_r, m_l], [m_l, m_r, t_r], [m_l, t_r, t_l]]:
+			for v in tri:
+				st.set_uv(Vector2(0, 0))
+				st.add_vertex(v)
 	st.generate_normals()
 	return st.commit()
 
