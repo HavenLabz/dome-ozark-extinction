@@ -1,0 +1,379 @@
+extends CharacterBody3D
+class_name Creature
+## Wildlife AI foundation — a living animal, not an enemy (North Star: Wildlife First).
+##
+## One script drives every species; behavior is read from `CreatureData`, so the
+## world grows by adding data. Senses live in `Perception`, pathing in
+## `NavigationAgent3D`. Behavior is a finite state machine with clear enter/exit
+## hooks so new states (Feed, Drink, Sleep, Mate, Migrate) drop in without
+## rewrites.
+##
+## Foundation states implemented (fully, no fakes — North Star Hard Rule #2):
+##   IDLE, WANDER, INVESTIGATE, FLEE, HUNT, ATTACK, DEAD.
+
+signal state_changed(new_state: State)
+signal health_changed(current: float, maximum: float)
+signal died(creature: Creature)
+
+enum State { IDLE, WANDER, INVESTIGATE, FLEE, HUNT, ATTACK, DEAD }
+
+@export var data: CreatureData
+## Optional: preassigned home. If null, home is wherever the creature spawns.
+@export var trophy_scene: PackedScene
+
+@onready var nav: NavigationAgent3D = $NavigationAgent3D
+@onready var perception: Perception = $Perception
+@onready var body_mesh: MeshInstance3D = $BodyMesh
+
+var _state: State = State.IDLE
+var _state_time: float = 0.0          # seconds spent in the current state
+var _health: float = 100.0
+var _home: Vector3
+var _target: Node3D                   # the player, when sensed
+var _last_known_pos: Vector3          # where we last sensed the target
+var _time_since_sensed: float = 999.0
+var _attack_timer: float = 0.0
+var _idle_wait: float = 0.0
+var _gravity: float = ProjectSettings.get_setting("physics/3d/default_gravity")
+var _rng := RandomNumberGenerator.new()
+var _rig: CreatureRig
+
+
+func _ready() -> void:
+	_rng.randomize()
+	if data == null:
+		push_warning("Creature has no CreatureData assigned; using defaults.")
+		data = CreatureData.new()
+	_health = data.max_health
+	_home = global_position
+	perception.configure(data)
+	_build_visual()
+	# Defer initial navmesh sync so the region is ready on the first frame.
+	call_deferred("_post_ready")
+
+
+func _post_ready() -> void:
+	health_changed.emit(_health, data.max_health)
+	_enter_state(State.IDLE)
+
+
+func _physics_process(delta: float) -> void:
+	if _state == State.DEAD:
+		return
+
+	_state_time += delta
+	_time_since_sensed += delta
+	_attack_timer = maxf(0.0, _attack_timer - delta)
+
+	_sense_target()
+
+	match _state:
+		State.IDLE: _tick_idle(delta)
+		State.WANDER: _tick_wander(delta)
+		State.INVESTIGATE: _tick_investigate(delta)
+		State.FLEE: _tick_flee(delta)
+		State.HUNT: _tick_hunt(delta)
+		State.ATTACK: _tick_attack(delta)
+
+	_apply_gravity(delta)
+	move_and_slide()
+
+	if _rig:
+		_rig.animate(Vector2(velocity.x, velocity.z).length(), delta)
+
+
+# ---------------------------------------------------------------------------
+# Perception → awareness
+# ---------------------------------------------------------------------------
+
+func _sense_target() -> void:
+	var player := _find_player()
+	if player == null:
+		return
+	var loud := _is_player_loud(player)
+	var facing := -global_transform.basis.z
+	if perception.can_see(player, facing) or perception.can_hear(player, loud):
+		_target = player
+		_last_known_pos = player.global_position
+		_time_since_sensed = 0.0
+		_react_to_sensed_target()
+
+
+## Decide what a fresh sighting means for THIS species.
+func _react_to_sensed_target() -> void:
+	if _state == State.DEAD:
+		return
+	if data.diet == CreatureData.Diet.HERBIVORE:
+		# Prey animals bolt once a threat is inside their comfort distance.
+		if global_position.distance_to(_last_known_pos) <= data.flee_distance:
+			if _state != State.FLEE:
+				_change_state(State.FLEE)
+	else:
+		# Predators/omnivores close in.
+		if _state in [State.IDLE, State.WANDER]:
+			_change_state(State.HUNT if data.is_aggressive else State.INVESTIGATE)
+
+
+func _is_player_loud(player: Node) -> bool:
+	# The player controller exposes `is_sprinting` when moving fast.
+	return player.has_method("is_making_noise") and player.is_making_noise()
+
+
+func _find_player() -> Node3D:
+	return get_tree().get_first_node_in_group("player") as Node3D
+
+
+# ---------------------------------------------------------------------------
+# States
+# ---------------------------------------------------------------------------
+
+func _tick_idle(_delta: float) -> void:
+	velocity.x = move_toward(velocity.x, 0.0, data.walk_speed)
+	velocity.z = move_toward(velocity.z, 0.0, data.walk_speed)
+	if _state_time >= _idle_wait:
+		_change_state(State.WANDER)
+
+
+func _tick_wander(delta: float) -> void:
+	# Judge arrival by real distance, not is_navigation_finished() — the latter
+	# reports "finished" on the same frame the target is set (before the path
+	# exists), which would bail out before the creature ever moves.
+	if global_position.distance_to(nav.target_position) <= 1.5:
+		_change_state(State.IDLE)
+		return
+	if _state_time > 12.0:  # unreachable target — give up and re-roll
+		_change_state(State.IDLE)
+		return
+	_steer_along_path(data.walk_speed, delta)
+
+
+func _tick_investigate(delta: float) -> void:
+	# Curiosity: walk toward where the target was last sensed.
+	if _time_since_sensed > data.alert_memory:
+		_change_state(State.WANDER)  # lost interest → drift home
+		return
+	nav.target_position = _last_known_pos
+	if global_position.distance_to(_last_known_pos) <= 2.5:
+		# Reached the spot. Aggressive types commit; others lose their nerve.
+		if data.is_aggressive:
+			_change_state(State.HUNT)
+		else:
+			_change_state(State.WANDER)
+		return
+	_steer_along_path(data.walk_speed, delta)
+
+
+func _tick_flee(delta: float) -> void:
+	var threat := _last_known_pos
+	var dist := global_position.distance_to(threat)
+	# Safe once the threat is far AND we haven't sensed it for a while.
+	if dist > data.flee_distance * 1.75 and _time_since_sensed > data.alert_memory:
+		_change_state(State.IDLE)
+		return
+	# Re-pick a flee point directly away from the threat periodically (not every
+	# frame — the path needs time to compute) or once the current one is reached.
+	if _state_time_expired(1.0) or global_position.distance_to(nav.target_position) < 2.0:
+		var away := (global_position - threat)
+		away.y = 0.0
+		if away.length() < 0.1:
+			away = Vector3(_rng.randf_range(-1, 1), 0, _rng.randf_range(-1, 1))
+		nav.target_position = global_position + away.normalized() * 12.0
+		_state_time = 0.0
+	_steer_along_path(data.run_speed, delta)
+
+
+func _tick_hunt(delta: float) -> void:
+	if _target == null or _time_since_sensed > data.alert_memory:
+		# Lost the trail — go check the last spot before giving up.
+		_change_state(State.INVESTIGATE)
+		return
+	var dist := global_position.distance_to(_target.global_position)
+	if dist <= data.attack_range:
+		_change_state(State.ATTACK)
+		return
+	nav.target_position = _target.global_position
+	_steer_along_path(data.run_speed, delta)
+
+
+func _tick_attack(delta: float) -> void:
+	velocity.x = move_toward(velocity.x, 0.0, data.run_speed)
+	velocity.z = move_toward(velocity.z, 0.0, data.run_speed)
+	if _target == null:
+		_change_state(State.HUNT)
+		return
+	var dist := global_position.distance_to(_target.global_position)
+	if dist > data.attack_range * 1.3:
+		_change_state(State.HUNT)
+		return
+	_face_toward(_target.global_position, delta)
+	if _attack_timer <= 0.0:
+		_attack_timer = data.attack_cooldown
+		_deal_attack_damage()
+
+
+# ---------------------------------------------------------------------------
+# Combat + death
+# ---------------------------------------------------------------------------
+
+## Public API — weapons, hazards, or other creatures call this.
+func take_damage(amount: float, from_position: Vector3 = global_position) -> void:
+	if _state == State.DEAD:
+		return
+	_health = maxf(0.0, _health - amount)
+	health_changed.emit(_health, data.max_health)
+	_last_known_pos = from_position
+	_time_since_sensed = 0.0
+	if _health <= 0.0:
+		_die()
+		return
+	# Being hurt overrides calm behavior.
+	if data.diet == CreatureData.Diet.HERBIVORE or not data.is_aggressive:
+		_change_state(State.FLEE)
+	else:
+		_target = _find_player()
+		_change_state(State.HUNT)
+
+
+func _deal_attack_damage() -> void:
+	if _target != null and _target.has_method("apply_damage"):
+		_target.apply_damage(data.attack_damage)
+
+
+func _die() -> void:
+	_change_state(State.DEAD)
+	velocity = Vector3.ZERO
+	# Drop from the physics/creature layers so it no longer blocks or is chased.
+	set_deferred("collision_layer", 0)
+	set_deferred("collision_mask", 0)
+	if _rig:
+		_rig.rotation_degrees.z = 90.0  # topple over (crude until death anim)
+		_rig.position.y = 0.4
+	_spawn_trophy()
+	died.emit(self)
+
+
+func _spawn_trophy() -> void:
+	if trophy_scene == null:
+		return
+	var trophy := trophy_scene.instantiate()
+	get_parent().add_child(trophy)
+	trophy.global_position = global_position + Vector3.UP * 0.3
+	if trophy.has_method("setup_from_creature"):
+		trophy.setup_from_creature(data)
+
+
+# ---------------------------------------------------------------------------
+# Movement helpers
+# ---------------------------------------------------------------------------
+
+func _steer_along_path(speed: float, delta: float) -> void:
+	# Resilient locomotion: follow the navmesh path when one exists (it routes
+	# around trees/ruins), but fall back to steering straight at the goal when the
+	# navigation map has no usable path. Either way the creature keeps moving;
+	# CharacterBody3D collision makes it slide around obstacles in the fallback.
+	var goal := nav.target_position
+	var point := nav.get_next_path_position()
+	var have_nav_waypoint := global_position.distance_to(point) > 0.25
+	if not have_nav_waypoint and global_position.distance_to(goal) > 0.25:
+		point = goal  # navmesh unavailable — head directly for the goal
+
+	var dir := (point - global_position)
+	dir.y = 0.0
+	if dir.length() < 0.15:
+		velocity.x = move_toward(velocity.x, 0.0, speed)
+		velocity.z = move_toward(velocity.z, 0.0, speed)
+		return
+	dir = dir.normalized()
+	velocity.x = dir.x * speed
+	velocity.z = dir.z * speed
+	_face_toward(global_position + dir, delta)
+
+
+func _face_toward(world_point: Vector3, delta: float) -> void:
+	var to := world_point - global_position
+	to.y = 0.0
+	if to.length() < 0.05:
+		return
+	var desired := atan2(to.x, to.z)
+	rotation.y = rotate_toward(rotation.y, desired, data.turn_speed * delta)
+
+
+func _apply_gravity(delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= _gravity * delta
+	elif velocity.y < 0.0:
+		velocity.y = 0.0
+
+
+func _pick_wander_target() -> void:
+	# Sample a point inside the home territory so the animal stays local.
+	var angle := _rng.randf_range(0.0, TAU)
+	var radius := _rng.randf_range(4.0, data.territory_radius)
+	var offset := Vector3(cos(angle), 0.0, sin(angle)) * radius
+	nav.target_position = _home + offset
+
+
+func _state_time_expired(seconds: float) -> bool:
+	return _state_time >= seconds
+
+
+# ---------------------------------------------------------------------------
+# State machine plumbing
+# ---------------------------------------------------------------------------
+
+func _change_state(new_state: State) -> void:
+	if new_state == _state:
+		return
+	_exit_state(_state)
+	_enter_state(new_state)
+
+
+func _enter_state(new_state: State) -> void:
+	_state = new_state
+	_state_time = 0.0
+	match new_state:
+		State.IDLE:
+			_idle_wait = _rng.randf_range(1.5, 4.0)
+		State.WANDER:
+			_pick_wander_target()
+		State.FLEE:
+			pass
+	state_changed.emit(new_state)
+
+
+func _exit_state(_old_state: State) -> void:
+	pass
+
+
+# ---------------------------------------------------------------------------
+# Appearance — stylized procedural rig (seed for final sculpted models)
+# ---------------------------------------------------------------------------
+
+func _build_visual() -> void:
+	if body_mesh:
+		body_mesh.visible = false  # hide the old debug box
+	_rig = CreatureRig.new()
+	add_child(_rig)
+	_rig.build(data)
+
+
+# ---------------------------------------------------------------------------
+# Introspection (used by debug HUD / tests)
+# ---------------------------------------------------------------------------
+
+## Route this creature on a specific navigation map (the dome's dedicated map).
+func use_navigation_map(map: RID) -> void:
+	if map.is_valid():
+		nav.set_navigation_map(map)
+
+
+func get_state() -> State:
+	return _state
+
+
+func get_state_name() -> String:
+	return State.keys()[_state]
+
+
+func get_health() -> float:
+	return _health

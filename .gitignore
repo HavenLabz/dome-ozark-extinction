@@ -1,0 +1,17 @@
+# Godot 4
+game/.godot/
+game/*.translation
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / browser prototype
+node_modules/
+dist/
+*.local
+
+# Editor
+.vscode/
+.idea/
+*.swp

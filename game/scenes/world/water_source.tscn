@@ -1,0 +1,15 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://scripts/world/water_source.gd" id="1"]
+
+[sub_resource type="CylinderShape3D" id="Cyl_water"]
+radius = 3.0
+height = 2.0
+
+[node name="WaterSource" type="Area3D"]
+collision_layer = 16
+collision_mask = 0
+script = ExtResource("1")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="."]
+shape = SubResource("Cyl_water")
