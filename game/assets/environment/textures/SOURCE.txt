@@ -1,0 +1,3 @@
+PBR ground textures — Poly Haven (CC0, public domain). Free for commercial use.
+  forrest_ground_01, brown_mud_leaves_01, aerial_rocks_02 (diffuse + roughness, 2K)
+  https://polyhaven.com/

@@ -146,6 +146,19 @@ func _make_ground_material() -> Material:
 	var mat := ShaderMaterial.new()
 	mat.shader = shader
 	mat.set_shader_parameter("water_level", water_level)
+	# Real PBR ground textures (Poly Haven CC0) when present.
+	var tex_dir := "res://assets/environment/textures/"
+	var maps := {
+		"grass_tex": "forrest_ground_01_diff.jpg", "grass_rough": "forrest_ground_01_rough.jpg",
+		"dirt_tex": "brown_mud_leaves_01_diff.jpg", "dirt_rough": "brown_mud_leaves_01_rough.jpg",
+		"rock_tex": "aerial_rocks_02_diff.jpg", "rock_rough": "aerial_rocks_02_rough.jpg",
+	}
+	for param in maps:
+		var path: String = tex_dir + maps[param]
+		if ResourceLoader.exists(path):
+			var t := load(path) as Texture2D
+			if t:
+				mat.set_shader_parameter(param, t)
 	return mat
 
 
