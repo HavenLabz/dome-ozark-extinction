@@ -67,9 +67,11 @@ func _apply_attachments() -> void:
 	var att: Dictionary = GameState.attachments.get(key, {})
 	_suppressed = att.get("suppressor", false)
 	_foregrip = att.get("foregrip", false)
-	var optic: String = att.get("optic", "iron")
-	var idx: int = {"iron": 0, "reflex": 1, "scope": 2}.get(optic, 0)
-	_optic_idx = clampi(idx, 0, maxi(0, _optics.size() - 1))
+	# Only override the optic if the deployment screen actually set one; otherwise
+	# keep the weapon's own default (e.g. a bolt gun starts scoped).
+	if att.has("optic"):
+		var idx: int = {"iron": 0, "reflex": 1, "scope": 2}.get(att["optic"], 0)
+		_optic_idx = clampi(idx, 0, maxi(0, _optics.size() - 1))
 	if _suppressed:
 		# A stubby suppressor on the muzzle.
 		var can := _part(Vector3(0.05, 0.05, 0.14),
@@ -144,8 +146,12 @@ func try_fire(ads: bool) -> bool:
 	if _foregrip:
 		bloom *= 0.6   # foregrip tightens the spread bloom
 	_spread = minf(data.spread_max, _spread + bloom)
-	if _suppressed:
+	if data.body_style == "BOW":
+		Sfx.play("bow", 1.0, -8.0)
+	elif _suppressed:
 		Sfx.play("shot", 1.4 if data.body_style == "PISTOL" else 1.25, -16.0)
+	elif data.body_style == "SHOTGUN":
+		Sfx.play("shot", 0.7, 0.0)   # deeper, louder boom
 	else:
 		Sfx.play("shot", 1.15 if data.body_style == "PISTOL" else 1.0, -2.0)
 	fired.emit()
@@ -338,53 +344,96 @@ func _build_viewmodel() -> void:
 	var sleeve := _mk_mat(Color(0.20, 0.26, 0.19), 0.0, 0.82)
 	var body := _mk_mat(data.tint, 0.55, 0.42)
 
-	if data.body_style == "PISTOL":
-		_rest_pos = Vector3(0.22, -0.20, -0.45)
-		# ADS: drop the slide low so the target sits above it, front post centred.
-		_ads_pos = Vector3(0.0, -0.09, -0.28)
-		_part(Vector3(0.052, 0.072, 0.30), Vector3(0, 0.03, -0.03), metal)    # slide
-		_part(Vector3(0.05, 0.05, 0.20), Vector3(0, 0.0, -0.10), metal)       # frame/dust cover
-		_mag = _part(Vector3(0.048, 0.13, 0.07), Vector3(0, -0.085, 0.055), polymer) # grip+mag
-		_part(Vector3(0.05, 0.028, 0.11), Vector3(0, -0.028, 0.015), polymer) # trigger guard
-		_part(Vector3(0.008, 0.022, 0.008), Vector3(0, 0.078, -0.16), metal)  # front sight post
-		_part(Vector3(0.006, 0.02, 0.008), Vector3(-0.014, 0.072, 0.10), metal)  # rear notch L
-		_part(Vector3(0.006, 0.02, 0.008), Vector3(0.014, 0.072, 0.10), metal)   # rear notch R
-		_muzzle = _point(Vector3(0, 0.03, -0.19))
-		# Two-handed pistol grip: firing hand on the grip, support hand cupped under.
-		_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
-	else:  # RIFLE
-		_rest_pos = Vector3(0.26, -0.22, -0.55)
-		# ADS: drop the gun low so you look OVER the receiver with the target
-		# clearly visible above it, front post centered on the aim axis.
-		_ads_pos = Vector3(0.0, -0.115, -0.30)
-		_part(Vector3(0.07, 0.09, 0.42), Vector3(0, 0, 0), body)             # receiver (tinted)
-		_part(Vector3(0.042, 0.042, 0.46), Vector3(0, 0.03, -0.42), metal)   # barrel
-		_part(Vector3(0.058, 0.055, 0.26), Vector3(0, 0.005, -0.30), furn)   # handguard
-		_mag = _part(Vector3(0.055, 0.15, 0.085), Vector3(0, -0.125, 0.05), polymer)  # magazine
-		_part(Vector3(0.05, 0.11, 0.07), Vector3(0, -0.095, 0.14), polymer)  # pistol grip
-		_part(Vector3(0.062, 0.10, 0.22), Vector3(0, -0.005, 0.31), furn)    # stock
-		_part(Vector3(0.028, 0.016, 0.30), Vector3(0, 0.062, -0.06), polymer)# low top rail
-		# Iron sights: a thin front post centred on the aim axis, and a rear
-		# notch (two posts with a gap) you look THROUGH — not a solid block.
-		_part(Vector3(0.007, 0.032, 0.007), Vector3(0, 0.086, -0.40), metal) # front sight post
-		_part(Vector3(0.006, 0.028, 0.008), Vector3(-0.017, 0.078, 0.15), metal)  # rear notch L
-		_part(Vector3(0.006, 0.028, 0.008), Vector3(0.017, 0.078, 0.15), metal)   # rear notch R
-		_muzzle = _point(Vector3(0, 0.03, -0.62))
-		# Support hand on the handguard, firing hand on the grip.
-		_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
+	match data.body_style:
+		"PISTOL":
+			_rest_pos = Vector3(0.22, -0.20, -0.45)
+			_ads_pos = Vector3(0.0, -0.09, -0.28)
+			_part(Vector3(0.052, 0.072, 0.30), Vector3(0, 0.03, -0.03), metal)    # slide
+			_part(Vector3(0.05, 0.05, 0.20), Vector3(0, 0.0, -0.10), metal)       # frame/dust cover
+			_mag = _part(Vector3(0.048, 0.13, 0.07), Vector3(0, -0.085, 0.055), polymer)
+			_part(Vector3(0.05, 0.028, 0.11), Vector3(0, -0.028, 0.015), polymer) # trigger guard
+			_part(Vector3(0.008, 0.022, 0.008), Vector3(0, 0.078, -0.16), metal)  # front sight
+			_part(Vector3(0.006, 0.02, 0.008), Vector3(-0.014, 0.072, 0.10), metal)
+			_part(Vector3(0.006, 0.02, 0.008), Vector3(0.014, 0.072, 0.10), metal)
+			_muzzle = _point(Vector3(0, 0.03, -0.19))
+			_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
+		"SHOTGUN":
+			_rest_pos = Vector3(0.26, -0.22, -0.52)
+			_ads_pos = Vector3(0.0, -0.11, -0.30)
+			_part(Vector3(0.075, 0.085, 0.40), Vector3(0, 0, 0.02), body)        # receiver
+			_part(Vector3(0.055, 0.055, 0.42), Vector3(0, 0.03, -0.34), metal)   # thick barrel
+			_mag = _part(Vector3(0.05, 0.045, 0.22), Vector3(0, -0.03, -0.28), metal)  # tube mag
+			_part(Vector3(0.075, 0.06, 0.12), Vector3(0, -0.05, -0.20), furn)    # pump fore-grip
+			_part(Vector3(0.05, 0.10, 0.07), Vector3(0, -0.085, 0.13), polymer)  # grip
+			_part(Vector3(0.075, 0.11, 0.22), Vector3(0, -0.01, 0.31), furn)     # stock
+			_part(Vector3(0.008, 0.03, 0.008), Vector3(0, 0.078, -0.34), metal)  # bead
+			_muzzle = _point(Vector3(0, 0.03, -0.56))
+			_build_arms(Vector3(0.0, -0.07, -0.18), Vector3(0.0, -0.045, -0.28), glove, sleeve)
+		"SNIPER":
+			_rest_pos = Vector3(0.26, -0.22, -0.55)
+			_ads_pos = Vector3(0.0, -0.085, -0.26)
+			_part(Vector3(0.06, 0.07, 0.44), Vector3(0, 0, 0), body)             # receiver
+			_part(Vector3(0.032, 0.032, 0.64), Vector3(0, 0.02, -0.52), metal)   # long thin barrel
+			_mag = _part(Vector3(0.05, 0.10, 0.06), Vector3(0, -0.085, 0.02), polymer)
+			_part(Vector3(0.05, 0.10, 0.07), Vector3(0, -0.09, 0.13), furn)      # grip
+			_part(Vector3(0.075, 0.11, 0.32), Vector3(0, -0.01, 0.35), furn)     # long wood stock
+			_part(Vector3(0.05, 0.05, 0.26), Vector3(0, 0.105, -0.02), metal)    # scope tube
+			_part(Vector3(0.018, 0.05, 0.02), Vector3(0, 0.078, -0.12), metal)   # front ring
+			_part(Vector3(0.018, 0.05, 0.02), Vector3(0, 0.078, 0.08), metal)    # rear ring
+			_part(Vector3(0.018, 0.018, 0.07), Vector3(0.055, 0.01, 0.07), metal)# bolt handle
+			_muzzle = _point(Vector3(0, 0.02, -0.80))
+			_build_arms(Vector3(0.0, -0.09, -0.20), Vector3(0.0, -0.045, 0.02), glove, sleeve)
+		"BOW":
+			_rest_pos = Vector3(0.24, -0.20, -0.50)
+			_ads_pos = Vector3(0.0, -0.10, -0.30)
+			_part(Vector3(0.04, 0.05, 0.50), Vector3(0, 0, 0.04), furn)          # stock rail
+			_part(Vector3(0.03, 0.04, 0.34), Vector3(0, 0.03, -0.26), metal)     # flight groove
+			var limb_l := _part(Vector3(0.24, 0.03, 0.04), Vector3(-0.12, 0.04, -0.36), metal)
+			limb_l.rotation.z = 0.4
+			var limb_r := _part(Vector3(0.24, 0.03, 0.04), Vector3(0.12, 0.04, -0.36), metal)
+			limb_r.rotation.z = -0.4
+			_part(Vector3(0.46, 0.005, 0.005), Vector3(0, 0.03, -0.30), metal)   # string
+			_mag = _part(Vector3(0.035, 0.05, 0.05), Vector3(0, -0.05, 0.05), polymer)  # trigger
+			_part(Vector3(0.05, 0.10, 0.07), Vector3(0, -0.085, 0.10), polymer)  # grip
+			_part(Vector3(0.008, 0.03, 0.008), Vector3(0, 0.075, -0.28), metal)  # sight
+			_muzzle = _point(Vector3(0, 0.04, -0.50))
+			_build_arms(Vector3(0.0, -0.075, -0.02), Vector3(0.0, -0.045, 0.12), glove, sleeve)
+		_:  # RIFLE
+			_rest_pos = Vector3(0.26, -0.22, -0.55)
+			_ads_pos = Vector3(0.0, -0.115, -0.30)
+			_part(Vector3(0.07, 0.09, 0.42), Vector3(0, 0, 0), body)             # receiver (tinted)
+			_part(Vector3(0.042, 0.042, 0.46), Vector3(0, 0.03, -0.42), metal)   # barrel
+			_part(Vector3(0.058, 0.055, 0.26), Vector3(0, 0.005, -0.30), furn)   # handguard
+			_mag = _part(Vector3(0.055, 0.15, 0.085), Vector3(0, -0.125, 0.05), polymer)
+			_part(Vector3(0.05, 0.11, 0.07), Vector3(0, -0.095, 0.14), polymer)  # pistol grip
+			_part(Vector3(0.062, 0.10, 0.22), Vector3(0, -0.005, 0.31), furn)    # stock
+			_part(Vector3(0.028, 0.016, 0.30), Vector3(0, 0.062, -0.06), polymer)# low top rail
+			_part(Vector3(0.007, 0.032, 0.007), Vector3(0, 0.086, -0.40), metal) # front sight
+			_part(Vector3(0.006, 0.028, 0.008), Vector3(-0.017, 0.078, 0.15), metal)
+			_part(Vector3(0.006, 0.028, 0.008), Vector3(0.017, 0.078, 0.15), metal)
+			_muzzle = _point(Vector3(0, 0.03, -0.62))
+			_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
 
-	# Optic loadout (cycle with V). Rifles can mount a scope.
-	if data.body_style == "PISTOL":
-		_optics = [
-			{"name": "Iron Sights", "fov": 52.0, "scoped": false},
-			{"name": "Reflex Sight", "fov": 46.0, "scoped": false},
-		]
-	else:
-		_optics = [
-			{"name": "Iron Sights", "fov": 50.0, "scoped": false},
-			{"name": "Reflex Sight", "fov": 44.0, "scoped": false},
-			{"name": "4x Hunting Scope", "fov": 20.0, "scoped": true},
-		]
+	# Optic loadout (cycle with V).
+	match data.body_style:
+		"PISTOL", "SHOTGUN", "BOW":
+			_optics = [
+				{"name": "Iron Sights", "fov": 52.0, "scoped": false},
+				{"name": "Reflex Sight", "fov": 46.0, "scoped": false},
+			]
+		"SNIPER":
+			_optics = [
+				{"name": "Iron Sights", "fov": 48.0, "scoped": false},
+				{"name": "4x Scope", "fov": 20.0, "scoped": true},
+				{"name": "8x Scope", "fov": 10.0, "scoped": true},
+			]
+			_optic_idx = 1   # bolt guns come scoped by default
+		_:
+			_optics = [
+				{"name": "Iron Sights", "fov": 50.0, "scoped": false},
+				{"name": "Reflex Sight", "fov": 44.0, "scoped": false},
+				{"name": "4x Hunting Scope", "fov": 20.0, "scoped": true},
+			]
 
 	position = _rest_pos
 

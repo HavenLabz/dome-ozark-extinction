@@ -141,15 +141,34 @@ func _build_weapons() -> void:
 			load("res://data/weapons/m1911.tres"),
 		]
 	for wd in weapon_loadout:
-		var w := WEAPON_SCENE.new() as Weapon
-		w.data = wd
-		w.visible = false
-		camera.add_child(w)
-		w.shot_hit.connect(func(on_creature): hitmarker.emit(on_creature))
-		w.zone_hit.connect(func(zone): crit_hit.emit(zone))
-		_weapons.append(w)
+		_spawn_weapon(wd)
 	if not _weapons.is_empty():
 		_switch_weapon(0)
+
+
+func _spawn_weapon(wd: WeaponData) -> Weapon:
+	var w := WEAPON_SCENE.new() as Weapon
+	w.data = wd
+	w.visible = false
+	camera.add_child(w)
+	w.shot_hit.connect(func(on_creature): hitmarker.emit(on_creature))
+	w.zone_hit.connect(func(zone): crit_hit.emit(zone))
+	_weapons.append(w)
+	return w
+
+
+## Add a weapon found in the world (fallen soldier / outpost). Returns false if
+## the player already carries it (caller can then hand over ammo instead).
+func add_weapon(wd: WeaponData) -> bool:
+	if wd == null:
+		return false
+	for w in _weapons:
+		if w.data and w.data.weapon_id == wd.weapon_id:
+			return false
+	_spawn_weapon(wd)
+	_switch_weapon(_weapons.size() - 1)
+	weapon_changed.emit(_current_weapon())
+	return true
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -157,6 +176,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		head.rotate_y(-event.relative.x * mouse_sensitivity)
 		camera.rotate_x(-event.relative.y * mouse_sensitivity)
 		camera.rotation.x = clampf(camera.rotation.x, deg_to_rad(-89.0), deg_to_rad(89.0))
+
+	# Scroll wheel cycles through carried weapons.
+	if event is InputEventMouseButton and event.pressed and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_cycle_weapon(-1)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_cycle_weapon(1)
 
 	if event.is_action_pressed("ui_cancel"):
 		if Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
@@ -365,6 +391,12 @@ func _current_weapon() -> Weapon:
 ## Public accessor (HUD / tests).
 func get_active_weapon() -> Weapon:
 	return _current_weapon()
+
+
+func _cycle_weapon(dir: int) -> void:
+	if _weapons.size() <= 1:
+		return
+	_switch_weapon((_weapon_idx + dir + _weapons.size()) % _weapons.size())
 
 
 func _switch_weapon(idx: int) -> void:

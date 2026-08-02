@@ -102,6 +102,19 @@ func _build_library() -> void:
 	_lib["wind"] = _wav(_synth_wind(), true)
 	_lib["rain"] = _wav(_synth_rain(), true)
 	_lib["heartbeat"] = _wav(_synth_heartbeat())
+	_lib["bow"] = _wav(_synth_bow())
+
+
+## Crossbow release — a short low twang plus a whoosh.
+func _synth_bow() -> PackedFloat32Array:
+	var len := int(RATE * 0.25)
+	var s := _n(len)
+	for i in len:
+		var t := i / float(RATE)
+		var twang := sin(t * TAU * 180.0 * exp(-t * 3.0)) * exp(-t * 12.0)
+		var air := _rng.randf_range(-1.0, 1.0) * exp(-t * 20.0) * 0.3
+		s[i] = clampf(twang * 0.7 + air, -1.0, 1.0)
+	return s
 
 
 func _synth_heartbeat() -> PackedFloat32Array:

@@ -1,0 +1,25 @@
+[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+weapon_id = &"hunting_rifle"
+display_name = "Bolt-Action Hunter"
+damage = 130.0
+range = 520.0
+rounds_per_minute = 45.0
+fire_mode = 0
+pellets = 1
+mag_size = 5
+reserve_ammo = 30
+reload_time = 3.2
+recoil_pitch = 0.05
+recoil_yaw = 0.008
+recoil_recovery = 6.0
+spread_base = 0.0015
+spread_per_shot = 0.003
+spread_max = 0.03
+ads_factor = 0.12
+body_style = "SNIPER"
+tint = Color(0.2, 0.13, 0.08, 1)

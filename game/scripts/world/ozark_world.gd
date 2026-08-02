@@ -142,6 +142,7 @@ func _ready() -> void:
 	_build_campfires()
 	_add_birds()
 	_scatter_caches()
+	_scatter_gear()
 
 	# Let the freshly-created static colliders register with the physics server
 	# before we parse them into a navmesh (else the bake sees no geometry).
@@ -238,6 +239,12 @@ func _capture_screenshot() -> void:
 
 	# Weapon shot: use the player's own camera (which holds the viewmodel).
 	if "--shotweapon" in args:
+		var wi := args.find("--wpn")
+		if wi != -1 and wi + 1 < args.size():
+			var pl0 := get_tree().get_first_node_in_group("player")
+			var wd = load("res://data/weapons/%s.tres" % args[wi + 1])
+			if pl0 and pl0.has_method("add_weapon") and wd:
+				pl0.add_weapon(wd)
 		if "--ads" in args:
 			var pl := get_tree().get_first_node_in_group("player")
 			if pl and pl.has_method("get_active_weapon"):
@@ -324,6 +331,113 @@ func _scatter_caches() -> void:
 			continue
 		_make_cache(p)
 		placed += 1
+
+
+## The failed containment left dead soldiers and abandoned outposts across the
+## dome — the only place to find the shotgun, bolt-action, and crossbow.
+func _scatter_gear() -> void:
+	var arsenal := [
+		"res://data/weapons/shotgun.tres",
+		"res://data/weapons/crossbow.tres",
+		"res://data/weapons/hunting_rifle.tres",
+	]
+	var half := terrain.world_size * 0.5 - 20.0
+	var placed := 0
+	var attempts := 0
+	while placed < 5 and attempts < 400:
+		attempts += 1
+		var x := _rng.randf_range(-half, half)
+		var z := _rng.randf_range(-half, half)
+		var p := terrain.surface_point(x, z)
+		if p.y < _water_level + 0.8:
+			continue
+		if Vector2(x, z).distance_to(player_start) < 28.0:
+			continue
+		var wpath: String = arsenal[placed % arsenal.size()]
+		if placed == 0:
+			_make_outpost(p, wpath)   # first site is a stocked outpost
+		else:
+			_make_fallen_soldier(p, wpath)
+		placed += 1
+
+
+func _make_weapon_pickup(pos: Vector3, path: String) -> void:
+	var pick := Area3D.new()
+	pick.set_script(load("res://scripts/world/weapon_pickup.gd"))
+	pick.set("weapon_path", path)
+	pick.position = pos
+	var mi := MeshInstance3D.new()
+	var bm := BoxMesh.new()
+	bm.size = Vector3(0.1, 0.13, 0.72)
+	mi.mesh = bm
+	var mat := _solid_mat(Color(0.1, 0.1, 0.11))
+	mat.metallic = 0.6
+	mat.emission_enabled = true
+	mat.emission = Color(0.95, 0.78, 0.32)
+	mat.emission_energy_multiplier = 0.4
+	mi.material_override = mat
+	mi.rotation.x = 0.25
+	pick.add_child(mi)
+	var col := CollisionShape3D.new()
+	var sh := SphereShape3D.new()
+	sh.radius = 1.5
+	col.shape = sh
+	pick.add_child(col)
+	add_child(pick)
+
+
+func _gear_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
+	var mi := MeshInstance3D.new()
+	var b := BoxMesh.new()
+	b.size = size
+	mi.mesh = b
+	mi.position = pos
+	mi.material_override = mat
+	parent.add_child(mi)
+
+
+func _make_fallen_soldier(pos: Vector3, weapon_path: String) -> void:
+	var root := Node3D.new()
+	root.position = pos
+	root.rotation.y = _rng.randf_range(0.0, TAU)
+	add_child(root)
+	var uniform := _solid_mat(Color(0.16, 0.18, 0.13))
+	var skin := _solid_mat(Color(0.4, 0.3, 0.24))
+	var kit := _solid_mat(Color(0.11, 0.12, 0.10))
+	_gear_box(root, Vector3(0.42, 0.2, 0.72), Vector3(0, 0.12, 0), uniform)        # torso (prone)
+	_gear_box(root, Vector3(0.18, 0.16, 0.5), Vector3(-0.12, 0.1, 0.55), uniform)  # leg
+	_gear_box(root, Vector3(0.18, 0.16, 0.5), Vector3(0.12, 0.1, 0.55), uniform)   # leg
+	_gear_box(root, Vector3(0.22, 0.18, 0.22), Vector3(0, 0.14, -0.5), skin)       # head
+	_gear_box(root, Vector3(0.26, 0.1, 0.26), Vector3(0, 0.2, -0.5), kit)          # helmet
+	_gear_box(root, Vector3(0.32, 0.16, 0.36), Vector3(0, 0.22, 0.12), kit)        # backpack
+	_make_weapon_pickup(pos + Vector3(0.6, 0.35, 0.0), weapon_path)
+
+
+func _make_outpost(pos: Vector3, weapon_path: String) -> void:
+	var root := Node3D.new()
+	root.position = pos
+	root.rotation.y = _rng.randf_range(0.0, TAU)
+	add_child(root)
+	var sand := _solid_mat(Color(0.5, 0.44, 0.3))
+	var crate := _solid_mat(Color(0.3, 0.24, 0.14))
+	var canvas := _solid_mat(Color(0.22, 0.24, 0.18))
+	# Sandbag arc (low cover).
+	for i in 5:
+		var a := lerpf(-1.0, 1.0, i / 4.0)
+		_gear_box(root, Vector3(0.55, 0.42, 0.5), Vector3(a * 1.7, 0.21, -1.5), sand)
+	# Supply crates.
+	_gear_box(root, Vector3(0.6, 0.6, 0.6), Vector3(-0.8, 0.3, 0.1), crate)
+	_gear_box(root, Vector3(0.6, 0.6, 0.6), Vector3(0.1, 0.3, 0.4), crate)
+	# A leaning tarp/lean-to.
+	var tarp := MeshInstance3D.new()
+	var tm := BoxMesh.new()
+	tm.size = Vector3(1.6, 0.05, 1.2)
+	tarp.mesh = tm
+	tarp.material_override = canvas
+	tarp.position = Vector3(0.7, 1.0, -0.2)
+	tarp.rotation.x = 0.5
+	root.add_child(tarp)
+	_make_weapon_pickup(pos + Vector3(0.1, 0.95, 0.4), weapon_path)
 
 
 func _make_cache(pos: Vector3) -> void:
