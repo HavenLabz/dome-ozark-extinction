@@ -35,11 +35,48 @@ var trophies_collected: Array[StringName] = []
 var trophy_score: int = 0
 var is_extraction_available: bool = false
 
+# --- Persistent records (survive between runs, saved to disk) ---
+const SAVE_PATH := "user://records.cfg"
+var best_score: int = 0
+var hunts_completed: int = 0
+var lifetime_trophies: Dictionary = {}   # trophy_id -> count across all runs
+
+
+func _ready() -> void:
+	_load_records()
+
+
+func _load_records() -> void:
+	var cfg := ConfigFile.new()
+	if cfg.load(SAVE_PATH) != OK:
+		return
+	best_score = cfg.get_value("records", "best_score", 0)
+	hunts_completed = cfg.get_value("records", "hunts_completed", 0)
+	lifetime_trophies = cfg.get_value("records", "lifetime_trophies", {})
+
+
+func _save_records() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("records", "best_score", best_score)
+	cfg.set_value("records", "hunts_completed", hunts_completed)
+	cfg.set_value("records", "lifetime_trophies", lifetime_trophies)
+	cfg.save(SAVE_PATH)
+
+
+## Log a completed hunt's final score into the persistent records.
+func record_hunt(final_score: int) -> void:
+	hunts_completed += 1
+	best_score = maxi(best_score, final_score)
+	_save_records()
+
 ## Weather severity 0 (clear) .. 1 (full storm), set by WeatherManager each
 ## frame. Wildlife reads this to decide whether to shelter / hunker down.
 var storm_intensity: float = 0.0
 ## Set by the day/night cycle. Predators grow bolder and sharper-sensed at night.
 var is_night: bool = false
+## 0..1 threat level, driven by the ambush stalker — feeds the "being hunted"
+## heartbeat cue. 1 = it's on you.
+var danger: float = 0.0
 
 # --- Hunt loadout (chosen on the deployment screen, Carnivores-style) ---
 ## Weapon .tres paths the player deploys with. Empty = default loadout.
@@ -48,6 +85,9 @@ var loadout_weapons: Array[String] = []
 var target_species: Array[StringName] = []
 ## Field gear: each aid makes the hunt easier but taxes your final score.
 var gear := {"scent": false, "tracker": false, "ghillie": false}
+## Per-weapon attachments chosen on the deployment screen:
+##   weapon_path -> {optic: "iron"/"reflex"/"scope", suppressor: bool, foregrip: bool}
+var attachments: Dictionary = {}
 ## Score multiplier (1.0 = pure/fair-chase). Each gear item lowers it.
 var score_purity: float = 1.0
 ## Filled in at extraction so the front-end can show a results card.
@@ -132,6 +172,8 @@ func apply_damage(amount: float) -> void:
 func collect_trophy(trophy_id: StringName, value: int) -> void:
 	trophies_collected.append(trophy_id)
 	trophy_score += value
+	lifetime_trophies[trophy_id] = int(lifetime_trophies.get(trophy_id, 0)) + 1
+	_save_records()
 	trophy_collected.emit(trophy_id, value)
 
 

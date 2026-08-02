@@ -139,6 +139,7 @@ func _complete() -> void:
 	# Final score = raw trophy score scaled by fair-chase purity (gear taxes it).
 	var raw: int = GameState.trophy_score
 	var final: int = int(round(raw * GameState.score_purity))
+	GameState.record_hunt(final)
 	GameState.last_result = {
 		"extracted": true,
 		"trophies": GameState.trophies_collected.size(),

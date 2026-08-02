@@ -26,7 +26,19 @@ const ROSTER := [
 	["allosaurus", "Allosaurus", 700, "PREDATOR", RED],
 	["spinosaurus", "Spinosaurus", 900, "APEX", RED],
 	["tyrannosaurus", "Tyrannosaurus", 1000, "APEX", RED],
+	["ambush_stalker", "The Stalker — burrowing terror", 1500, "APEX", RED],
 ]
+
+# trophy_id -> display name, for the Field Records readout.
+const TROPHY_NAMES := {
+	"deer_trophy": "Whitetail Deer", "turkey_trophy": "Wild Turkey",
+	"bear_trophy": "Black Bear", "gallimimus_trophy": "Gallimimus",
+	"parasaurolophus_trophy": "Parasaurolophus", "brachiosaurus_trophy": "Brachiosaurus",
+	"stegosaurus_trophy": "Stegosaurus", "triceratops_trophy": "Triceratops",
+	"velociraptor_trophy": "Velociraptor", "allosaurus_trophy": "Allosaurus",
+	"spinosaurus_trophy": "Spinosaurus", "tyrannosaurus_trophy": "Tyrannosaurus",
+	"stalker_trophy": "The Stalker",
+}
 
 const WEAPONS := [
 	["res://data/weapons/ar15.tres", "AR-15 Carbine", "5.56 · 30-rnd · versatile"],
@@ -42,6 +54,7 @@ const GEAR := [
 var _main: Control
 var _setup: Control
 var _results: Control
+var _records: Control
 var _targets: Dictionary = {}       # id -> bool
 var _weapons_sel: Dictionary = {}   # path -> bool
 var _purity_label: Label
@@ -100,6 +113,8 @@ func _show(panel: Control) -> void:
 	_main.visible = panel == _main
 	_setup.visible = panel == _setup
 	_results.visible = panel == _results
+	if _records:
+		_records.visible = panel == _records
 
 
 # --- MAIN MENU ---------------------------------------------------------------
@@ -121,7 +136,10 @@ func _build_main() -> void:
 	_menu_button(v, "OPTIONS", func(): _toast("Options coming with the settings pass."))
 	_menu_button(v, "EXIT", func(): get_tree().quit())
 	_spacer(v, 12)
-	_cline(v, "Best score: %d      Trophies logged: %d" % [GameState.trophy_score, GameState.trophies_collected.size()], 12, DIM)
+	var total: int = 0
+	for k in GameState.lifetime_trophies:
+		total += int(GameState.lifetime_trophies[k])
+	_cline(v, "Best score: %d      Hunts: %d      Trophies logged: %d" % [GameState.best_score, GameState.hunts_completed, total], 12, DIM)
 
 
 # --- DEPLOYMENT SETUP --------------------------------------------------------
@@ -155,12 +173,45 @@ func _build_setup() -> void:
 	_line(area, "400 acres · river valley, bluffs, cave · full weather ecosystem", 12, DIM)
 	_line(area, "Appalachian Dome · Cascade Dome · Everglade Dome — LOCKED", 11, Color(0.4, 0.42, 0.4))
 
-	_section(left, "WEAPONS")
+	_section(left, "WEAPONS  +  ATTACHMENTS")
 	for w in WEAPONS:
-		_weapons_sel[w[0]] = true
-		var row := _toggle_row(left, w[1], w[2], true)
 		var path: String = w[0]
-		row.toggled.connect(func(on): _weapons_sel[path] = on)
+		_weapons_sel[path] = true
+		var att := {"optic": "iron", "suppressor": false, "foregrip": false}
+		GameState.attachments[path] = att
+		var box := _card(left)
+		var cb := CheckButton.new()
+		cb.text = w[1]
+		cb.button_pressed = true
+		cb.add_theme_font_size_override("font_size", 15)
+		cb.toggled.connect(func(on): _weapons_sel[path] = on)
+		box.add_child(cb)
+		_line(box, w[2], 11, DIM)
+		var arow := HBoxContainer.new()
+		arow.add_theme_constant_override("separation", 10)
+		box.add_child(arow)
+		var ol := Label.new()
+		ol.text = "Optic"
+		ol.add_theme_font_size_override("font_size", 12)
+		ol.add_theme_color_override("font_color", DIM)
+		arow.add_child(ol)
+		var opt := OptionButton.new()
+		opt.add_item("Iron")
+		opt.add_item("Reflex")
+		if path.contains("ar15"):
+			opt.add_item("4x Scope")
+		opt.item_selected.connect(func(i): att["optic"] = ["iron", "reflex", "scope"][i])
+		arow.add_child(opt)
+		var supp := CheckButton.new()
+		supp.text = "Suppressor"
+		supp.add_theme_font_size_override("font_size", 12)
+		supp.toggled.connect(func(on): att["suppressor"] = on)
+		arow.add_child(supp)
+		var grip := CheckButton.new()
+		grip.text = "Foregrip"
+		grip.add_theme_font_size_override("font_size", 12)
+		grip.toggled.connect(func(on): att["foregrip"] = on)
+		arow.add_child(grip)
 
 	_section(left, "FIELD GEAR  (lowers score)")
 	for g in GEAR:
@@ -274,7 +325,36 @@ func _populate_results() -> void:
 
 
 func _show_records() -> void:
-	_toast("Trophies logged: %d   ·   Best score: %d" % [GameState.trophies_collected.size(), GameState.trophy_score])
+	if _records == null:
+		_records = _panel()
+	for c in _records.get_children():
+		c.queue_free()
+	var center := CenterContainer.new()
+	center.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_records.add_child(center)
+	var v := _vbox(center, 8)
+	v.custom_minimum_size.x = 560
+	_title(v, "FIELD RECORDS", 34, AMBER)
+	_spacer(v, 8)
+	_stat(v, "Best hunt score", str(GameState.best_score), AMBER, 20)
+	_stat(v, "Hunts completed", str(GameState.hunts_completed))
+	var total: int = 0
+	for k in GameState.lifetime_trophies:
+		total += int(GameState.lifetime_trophies[k])
+	_stat(v, "Total trophies taken", str(total))
+	_spacer(v, 10)
+	_section(v, "TROPHIES BY SPECIES")
+	if GameState.lifetime_trophies.is_empty():
+		_line(v, "No trophies logged yet — enter the dome.", 13, DIM)
+	else:
+		for id in GameState.lifetime_trophies:
+			var nm: String = TROPHY_NAMES.get(String(id), String(id))
+			_stat(v, nm, "× %d" % int(GameState.lifetime_trophies[id]))
+	_spacer(v, 18)
+	var back := _wide_button("◄ BACK", DIM)
+	back.pressed.connect(func(): _show(_main))
+	v.add_child(back)
+	_show(_records)
 
 
 # --- UI helpers --------------------------------------------------------------

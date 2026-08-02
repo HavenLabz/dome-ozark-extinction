@@ -42,6 +42,8 @@ var _kick_pos: Vector3 = Vector3.ZERO
 var _kick_rot: float = 0.0
 var _mag: MeshInstance3D         # the magazine, animated during reload
 var _mag_rest: Vector3           # its resting local position
+var _suppressed: bool = false    # deployment attachment: quieter, slightly weaker
+var _foregrip: bool = false      # deployment attachment: tighter spread + less kick
 var _rng := RandomNumberGenerator.new()
 
 
@@ -55,7 +57,24 @@ func _ready() -> void:
 	_build_viewmodel()
 	if _mag:
 		_mag_rest = _mag.position
+	_apply_attachments()
 	call_deferred("_emit_ammo")
+
+
+## Apply the attachments chosen for this weapon on the deployment screen.
+func _apply_attachments() -> void:
+	var key := data.resource_path
+	var att: Dictionary = GameState.attachments.get(key, {})
+	_suppressed = att.get("suppressor", false)
+	_foregrip = att.get("foregrip", false)
+	var optic: String = att.get("optic", "iron")
+	var idx: int = {"iron": 0, "reflex": 1, "scope": 2}.get(optic, 0)
+	_optic_idx = clampi(idx, 0, maxi(0, _optics.size() - 1))
+	if _suppressed:
+		# A stubby suppressor on the muzzle.
+		var can := _part(Vector3(0.05, 0.05, 0.14),
+			Vector3(0, 0.03 if data.body_style == "PISTOL" else 0.03, -0.62 if data.body_style != "PISTOL" else -0.24),
+			_mk_mat(Color(0.08, 0.08, 0.09), 0.7, 0.45))
 
 
 func _emit_ammo() -> void:
@@ -117,12 +136,18 @@ func try_fire(ads: bool) -> bool:
 	ammo_changed.emit(_in_mag, _reserve)
 	_do_hitscan(ads)
 	_apply_viewmodel_kick(ads)
-	_set_flash(true)
-	_flash_t = 0.05
+	if not _suppressed:
+		_set_flash(true)
+		_flash_t = 0.05
 	_eject_casing()
 	var bloom := data.spread_per_shot * (data.ads_factor if ads else 1.0)
+	if _foregrip:
+		bloom *= 0.6   # foregrip tightens the spread bloom
 	_spread = minf(data.spread_max, _spread + bloom)
-	Sfx.play("shot", 1.15 if data.body_style == "PISTOL" else 1.0, -2.0)
+	if _suppressed:
+		Sfx.play("shot", 1.4 if data.body_style == "PISTOL" else 1.25, -16.0)
+	else:
+		Sfx.play("shot", 1.15 if data.body_style == "PISTOL" else 1.0, -2.0)
 	fired.emit()
 	return true
 
@@ -249,7 +274,7 @@ func _do_hitscan(ads: bool) -> void:
 		var collider: Object = hit.get("collider")
 		var on_creature := collider != null and collider.has_method("take_damage")
 		if on_creature:
-			var dmg := data.damage * (1.5 if GameState.legendary_unlocked else 1.0)
+			var dmg := data.damage * (1.5 if GameState.legendary_unlocked else 1.0) * (0.85 if _suppressed else 1.0)
 			var zone: String = collider.take_damage(dmg, from, hit.get("position"))
 			if zone == "HEAD" or zone == "VITAL":
 				zone_hit.emit(zone)
@@ -286,6 +311,8 @@ func _spawn_impact(pos: Vector3, normal: Vector3, on_creature: bool) -> void:
 
 func _apply_viewmodel_kick(ads: bool) -> void:
 	var f := data.ads_factor if ads else 1.0
+	if _foregrip:
+		f *= 0.6   # foregrip tames the kick
 	_kick_pos += Vector3(0, 0, 0.06 * f)   # push toward the camera (+z)
 	_kick_rot += 0.05 * f                   # tip the muzzle up
 

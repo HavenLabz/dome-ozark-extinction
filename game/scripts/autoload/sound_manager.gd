@@ -26,12 +26,25 @@ func _ready() -> void:
 	_rain = _loop_player(_lib["rain"], -60.0)
 
 
-func _process(_delta: float) -> void:
+var _beat_t: float = 0.0
+
+
+func _process(delta: float) -> void:
 	# Ambience follows the weather: wind always breathes, louder in storms; rain
 	# fades in with severity.
 	var s: float = GameState.storm_intensity
 	_wind.volume_db = lerpf(-26.0, -8.0, s)
 	_rain.volume_db = -60.0 if s < 0.22 else lerpf(-30.0, -6.0, clampf((s - 0.22) / 0.78, 0.0, 1.0))
+
+	# "You're being hunted" — a heartbeat that quickens as the stalker closes.
+	var d: float = GameState.danger
+	if d > 0.08:
+		_beat_t -= delta
+		if _beat_t <= 0.0:
+			_beat_t = lerpf(1.1, 0.42, d)          # faster when the threat is near
+			play("heartbeat", 1.0, lerpf(-16.0, -2.0, d))
+	else:
+		_beat_t = 0.0
 
 
 # --- public API --------------------------------------------------------------
@@ -88,6 +101,19 @@ func _build_library() -> void:
 	_lib["chirp"] = _wav(_synth_chirp())
 	_lib["wind"] = _wav(_synth_wind(), true)
 	_lib["rain"] = _wav(_synth_rain(), true)
+	_lib["heartbeat"] = _wav(_synth_heartbeat())
+
+
+func _synth_heartbeat() -> PackedFloat32Array:
+	# Two low thumps (lub-dub) with fast decay.
+	var len := int(RATE * 0.32)
+	var s := _n(len)
+	for i in len:
+		var t := i / float(RATE)
+		var a := sin(t * TAU * 55.0) * exp(-t * 22.0)
+		var b := sin((t - 0.14) * TAU * 48.0) * exp(-(t - 0.14) * 24.0) if t > 0.14 else 0.0
+		s[i] = clampf(a + b, -1.0, 1.0) * 0.9
+	return s
 
 
 func _wav(samples: PackedFloat32Array, loop: bool = false) -> AudioStreamWAV:

@@ -89,6 +89,13 @@ func _physics_process(delta: float) -> void:
 	_attack_t = maxf(0.0, _attack_t - delta)
 	if _player == null:
 		return
+	# Feed the "being hunted" heartbeat cue.
+	var dist := global_position.distance_to(_player.global_position)
+	match _state:
+		S.ATTACK: GameState.danger = 1.0
+		S.EMERGE: GameState.danger = 0.9
+		S.SUBMERGE: GameState.danger = 0.25
+		_: GameState.danger = clampf(1.0 - dist / 45.0, 0.0, 0.65)
 	match _state:
 		S.LURK: _tick_lurk(delta)
 		S.EMERGE: _tick_emerge(delta)
@@ -166,6 +173,7 @@ func take_damage(amount: float, _from: Vector3 = global_position, _hit: Vector3 
 	if _health <= 0.0:
 		Sfx.play_at("roar", global_position + Vector3.UP, 0.4, 8.0)
 		GameState.collect_trophy(&"stalker_trophy", 1500)
+		GameState.danger = 0.0
 		queue_free()
 	return "BODY"
 
