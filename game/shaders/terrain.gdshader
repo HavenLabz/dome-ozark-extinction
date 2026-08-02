@@ -12,6 +12,10 @@ uniform sampler2D rock_tex : source_color;
 uniform sampler2D grass_rough;
 uniform sampler2D dirt_rough;
 uniform sampler2D rock_rough;
+uniform sampler2D grass_nrm;
+uniform sampler2D dirt_nrm;
+uniform sampler2D rock_nrm;
+uniform float normal_strength = 0.8;
 uniform vec3 grass_tint : source_color = vec3(0.72, 0.85, 0.5);  // nudge the floor greener
 uniform vec3 sand : source_color = vec3(0.58, 0.52, 0.36);
 uniform float tex_scale = 0.14;     // texture tiles per metre
@@ -85,7 +89,18 @@ void fragment() {
 	float sand_f = smoothstep(water_level + 1.8, water_level + 0.1, h) * step(slope, 0.95);
 	col = mix(col, mix(d_tex, sand, 0.6), sand_f * 0.9);
 
+	// Blend the tangent-space normals the same way, then tilt the world normal.
+	// (Ground is near +Y, so map the normal-map XY onto the world XZ plane — an
+	// approximation that's exact on flats and good enough on slopes.)
+	vec3 gn = texture(grass_nrm, sp.xz).xyz * 2.0 - 1.0;
+	vec3 dn = texture(dirt_nrm, sp.xz).xyz * 2.0 - 1.0;
+	vec3 rn = tri(rock_nrm, sp, w_norm) * 2.0 - 1.0;
+	vec3 nmap = mix(gn, dn, dirt_f);
+	nmap = mix(nmap, rn, rock_f);
+	vec3 world_n = normalize(w_norm + vec3(nmap.x, 0.0, nmap.y) * normal_strength);
+
 	ALBEDO = col;
+	NORMAL = normalize((VIEW_MATRIX * vec4(world_n, 0.0)).xyz);
 	ROUGHNESS = clamp(rough_v, 0.45, 1.0);
 	SPECULAR = 0.2;
 }

@@ -462,6 +462,33 @@ func _make_cache(pos: Vector3) -> void:
 	add_child(cache)
 
 
+## A triplanar PBR material from a Poly Haven texture set (albedo/normal/rough).
+## `tint` is a fallback colour if the textures aren't present.
+func _pbr_triplanar_mat(diff: String, nor: String, rough: String, scale: float, tint: Color) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_color = tint
+	m.roughness = 0.95
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3(scale, scale, scale)
+	if ResourceLoader.exists(diff):
+		m.albedo_texture = load(diff)
+		m.albedo_color = Color.WHITE
+	if ResourceLoader.exists(nor):
+		m.normal_enabled = true
+		m.normal_texture = load(nor)
+	if ResourceLoader.exists(rough):
+		m.roughness_texture = load(rough)
+	return m
+
+
+## Fade a VisualInstance out past `end` metres (with a soft margin) — the LOD/perf
+## lever that lets the world stay dense without paying for far-off detail.
+func _lod(vi: GeometryInstance3D, end: float, margin: float) -> void:
+	vi.visibility_range_end = end
+	vi.visibility_range_end_margin = margin
+	vi.visibility_range_fade_mode = GeometryInstance3D.VISIBILITY_RANGE_FADE_SELF
+
+
 ## Biome density at (x,z): 1 = dense forest, 0 = open glade/bald.
 func _forest_density(x: float, z: float) -> float:
 	return clampf(_forest_noise.get_noise_2d(x, z) * 0.5 + 0.5, 0.0, 1.0)
@@ -504,10 +531,13 @@ func _scatter_forest() -> void:
 	_register_wind_material(conifer_mat)
 	_register_wind_material(decid_mat)
 
-	var bark_mat := _solid_mat(Color(0.24, 0.17, 0.11))
-	bark_mat.roughness = 0.95
-	var oak_bark := _solid_mat(Color(0.29, 0.22, 0.15))
-	oak_bark.roughness = 0.95
+	# Real bark (Poly Haven CC0), triplanar so it wraps the trunk without UVs.
+	var bark_mat := _pbr_triplanar_mat(
+		"res://assets/environment/textures/bark_diff.jpg",
+		"res://assets/environment/textures/bark_nor.jpg",
+		"res://assets/environment/textures/bark_rough.jpg",
+		1.4, Color(0.24, 0.17, 0.11))
+	var oak_bark := bark_mat
 
 	# Oversample candidates and accept by local forest density, so trees cluster
 	# into real stands with open ground between — biome variety, "Minecraft" style.
@@ -558,6 +588,7 @@ func _make_deciduous_tree(base: Vector3, canopy: ArrayMesh, trunk_mesh: Mesh,
 	foliage.material_override = foliage_mat
 	foliage.scale = Vector3(scale, scale, scale)
 	foliage.position.y = 5.2 * scale     # canopy sits on top of the trunk
+	_lod(foliage, 260.0, 40.0)
 	tree.add_child(foliage)
 
 	var col := CollisionShape3D.new()
@@ -630,6 +661,7 @@ func _make_conifer_tree(base: Vector3, needles: ArrayMesh, trunk_mesh: Mesh,
 	foliage.mesh = needles
 	foliage.material_override = foliage_mat
 	foliage.scale = Vector3(scale, scale, scale)
+	_lod(foliage, 260.0, 40.0)
 	tree.add_child(foliage)
 
 	var col := CollisionShape3D.new()
@@ -709,6 +741,8 @@ func _make_glb_tree(base: Vector3, scene: PackedScene, target_h: float, trunk_ra
 		(model as Node3D).scale = Vector3(s, s, s)
 		# Sit the model's lowest point exactly on the ground.
 		(model as Node3D).position.y = -box.position.y * s
+	for mi in model.find_children("*", "MeshInstance3D", true, false):
+		_lod(mi as MeshInstance3D, 260.0, 40.0)
 
 	var col := CollisionShape3D.new()
 	var shape := CylinderShape3D.new()
@@ -821,6 +855,7 @@ func _scatter_grass(clump_count: int = 80000) -> void:
 	mmi.name = "Grass"
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_lod(mmi, 95.0, 20.0)   # grass isn't readable far off — cull it for FPS
 	add_child(mmi)
 
 
@@ -952,6 +987,7 @@ func _scatter_plant(mesh: ArrayMesh, mat: Material, count: int, biome: String, p
 	mmi.multimesh = mm
 	mmi.material_override = mat
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_lod(mmi, 140.0, 25.0)
 	add_child(mmi)
 
 
@@ -1301,8 +1337,11 @@ func _build_resource_cache(at: Vector2) -> void:
 ## Limestone bluffs — the Ozarks' eroded dolomite/limestone outcrops (the
 ## region's "mountains"). Stacked, tapering strata of pale rock.
 func _build_bluffs() -> void:
-	var rock := _solid_mat(Color(0.62, 0.60, 0.54))
-	rock.roughness = 1.0
+	var rock := _pbr_triplanar_mat(
+		"res://assets/environment/textures/aerial_rocks_02_diff.jpg",
+		"res://assets/environment/textures/aerial_rocks_02_nor.jpg",
+		"res://assets/environment/textures/aerial_rocks_02_rough.jpg",
+		0.25, Color(0.62, 0.60, 0.54))
 	var spots := [Vector2(95, 45), Vector2(-130, 90), Vector2(140, -100),
 		Vector2(-90, -140), Vector2(45, 160), Vector2(-160, -40)]
 	for at in spots:
@@ -1330,8 +1369,11 @@ func _build_cave(at: Vector2) -> void:
 	cave.name = "Cave"
 	cave.collision_layer = 1
 	cave.position = g
-	var rock := _solid_mat(Color(0.5, 0.48, 0.44))
-	rock.roughness = 1.0
+	var rock := _pbr_triplanar_mat(
+		"res://assets/environment/textures/aerial_rocks_02_diff.jpg",
+		"res://assets/environment/textures/aerial_rocks_02_nor.jpg",
+		"res://assets/environment/textures/aerial_rocks_02_rough.jpg",
+		0.3, Color(0.5, 0.48, 0.44))
 	# Chamber walls (entrance gap faces -Z), roof, and an exterior mound.
 	_add_box(cave, Vector3(11, 5, 1.2), Vector3(0, 2.5, 5.5), rock)      # back
 	_add_box(cave, Vector3(1.2, 5, 11), Vector3(5.5, 2.5, 0), rock)      # right

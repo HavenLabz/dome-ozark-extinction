@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://scripts/world/ozark_world.gd" id="1_world"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="2_player"]
@@ -50,6 +50,12 @@ adjustment_enabled = true
 adjustment_contrast = 1.08
 adjustment_saturation = 1.28
 
+[sub_resource type="CameraAttributesPractical" id="CamAttr_main"]
+dof_blur_far_enabled = true
+dof_blur_far_distance = 200.0
+dof_blur_far_transition = 80.0
+dof_blur_amount = 0.03
+
 [node name="Main" type="Node3D"]
 script = ExtResource("1_world")
 grazer_data = ExtResource("3_grazer")
@@ -57,6 +63,7 @@ raptor_data = ExtResource("4_raptor")
 
 [node name="WorldEnvironment" type="WorldEnvironment" parent="."]
 environment = SubResource("Environment_main")
+camera_attributes = SubResource("CamAttr_main")
 
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 transform = Transform3D(0.866, -0.354, 0.354, 0, 0.707, 0.707, -0.5, -0.612, 0.612, 0, 40, 0)

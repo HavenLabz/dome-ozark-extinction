@@ -150,8 +150,11 @@ func _make_ground_material() -> Material:
 	var tex_dir := "res://assets/environment/textures/"
 	var maps := {
 		"grass_tex": "forrest_ground_01_diff.jpg", "grass_rough": "forrest_ground_01_rough.jpg",
+		"grass_nrm": "forrest_ground_01_nor.jpg",
 		"dirt_tex": "brown_mud_leaves_01_diff.jpg", "dirt_rough": "brown_mud_leaves_01_rough.jpg",
+		"dirt_nrm": "brown_mud_leaves_01_nor.jpg",
 		"rock_tex": "aerial_rocks_02_diff.jpg", "rock_rough": "aerial_rocks_02_rough.jpg",
+		"rock_nrm": "aerial_rocks_02_nor.jpg",
 	}
 	for param in maps:
 		var path: String = tex_dir + maps[param]
