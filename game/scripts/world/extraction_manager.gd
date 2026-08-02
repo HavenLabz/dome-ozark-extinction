@@ -140,12 +140,18 @@ func _complete() -> void:
 	var raw: int = GameState.trophy_score
 	var final: int = int(round(raw * GameState.score_purity))
 	GameState.record_hunt(final)
+	var done := 0
+	for c in GameState.contracts:
+		if c["done"]:
+			done += 1
 	GameState.last_result = {
 		"extracted": true,
 		"trophies": GameState.trophies_collected.size(),
 		"raw": raw,
 		"purity": GameState.score_purity,
 		"final": final,
+		"contracts_done": done,
+		"contracts_total": GameState.contracts.size(),
 	}
 	status_changed.emit("EXTRACTED!  Final score: %d\nReturning to base..." % final)
 	GameState.is_extraction_available = true

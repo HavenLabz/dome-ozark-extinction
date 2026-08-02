@@ -105,11 +105,70 @@ var legendary_unlocked: bool = false
 signal cache_found(found: int, total: int)
 signal legendary_found
 
+# --- Contracts (per-hunt objectives, rolled at deployment) ---
+## trophy_id -> class, for contract matching.
+const TROPHY_CLASS := {
+	"deer_trophy": "game", "turkey_trophy": "game", "gallimimus_trophy": "game",
+	"parasaurolophus_trophy": "game", "brachiosaurus_trophy": "game",
+	"bear_trophy": "threat", "stegosaurus_trophy": "threat", "triceratops_trophy": "threat",
+	"velociraptor_trophy": "predator", "allosaurus_trophy": "predator",
+	"spinosaurus_trophy": "apex", "tyrannosaurus_trophy": "apex", "stalker_trophy": "apex",
+}
+const CONTRACT_POOL := [
+	{"type": "trophies", "target": 4, "desc": "Recover 4 trophies", "reward": 300},
+	{"type": "trophies", "target": 6, "desc": "Recover 6 trophies", "reward": 500},
+	{"type": "apex", "target": 1, "desc": "Take down an apex predator", "reward": 600},
+	{"type": "clean", "target": 3, "desc": "Land 3 clean vital kills", "reward": 400},
+	{"type": "predator", "target": 2, "desc": "Cull 2 predators", "reward": 350},
+	{"type": "caches", "target": 3, "desc": "Recover 3 hidden caches", "reward": 300},
+]
+var contracts: Array = []      # active: {type,target,desc,reward,progress,done}
+
+signal contracts_changed
+signal contract_completed(desc: String, reward: int)
+
+
+## Roll a fresh set of 3 contracts for a new hunt.
+func roll_contracts() -> void:
+	contracts.clear()
+	var pool := CONTRACT_POOL.duplicate()
+	pool.shuffle()
+	for i in mini(3, pool.size()):
+		var c: Dictionary = pool[i].duplicate()
+		c["progress"] = 0
+		c["done"] = false
+		contracts.append(c)
+	contracts_changed.emit()
+
+
+func _advance_contracts(kind: String, klass: String, clean: bool) -> void:
+	var changed := false
+	for c in contracts:
+		if c["done"]:
+			continue
+		var hit := false
+		match c["type"]:
+			"trophies": hit = kind == "trophy"
+			"apex": hit = kind == "trophy" and klass == "apex"
+			"predator": hit = kind == "trophy" and (klass == "predator" or klass == "apex")
+			"clean": hit = kind == "trophy" and clean
+			"caches": hit = kind == "cache"
+		if hit:
+			c["progress"] = int(c["progress"]) + 1
+			changed = true
+			if c["progress"] >= c["target"]:
+				c["done"] = true
+				trophy_score += int(c["reward"])
+				contract_completed.emit(c["desc"], int(c["reward"]))
+	if changed:
+		contracts_changed.emit()
+
 
 ## Recover a hidden cache: score + ammo, and the last one unlocks the legendary.
 func find_cache() -> void:
 	caches_found += 1
 	trophy_score += 100
+	_advance_contracts("cache", "", false)
 	cache_found.emit(caches_found, caches_total)
 	if caches_found >= caches_total and not legendary_unlocked:
 		legendary_unlocked = true
@@ -169,11 +228,12 @@ func apply_damage(amount: float) -> void:
 
 ## Record a recovered trophy and its prestige value. Trophies can repeat
 ## (you may hunt several of a species), so this is a log, not a set.
-func collect_trophy(trophy_id: StringName, value: int) -> void:
+func collect_trophy(trophy_id: StringName, value: int, clean: bool = false) -> void:
 	trophies_collected.append(trophy_id)
 	trophy_score += value
 	lifetime_trophies[trophy_id] = int(lifetime_trophies.get(trophy_id, 0)) + 1
 	_save_records()
+	_advance_contracts("trophy", TROPHY_CLASS.get(String(trophy_id), "game"), clean)
 	trophy_collected.emit(trophy_id, value)
 
 

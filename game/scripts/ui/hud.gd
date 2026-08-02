@@ -14,6 +14,7 @@ var _hitmark: Label
 var _hit_t: float = 0.0
 var _crit: Label
 var _crit_t: float = 0.0
+var _contracts: Label
 var _cross: Label
 var _scope: Control
 var _bound_weapon: Weapon
@@ -31,6 +32,8 @@ func _ready() -> void:
 	GameState.hydration_changed.connect(func(_v): _refresh_stats())
 	GameState.trophy_collected.connect(func(_id, _val): _refresh_score())
 	GameState.cache_found.connect(func(_f, _t): _refresh_score())
+	GameState.contracts_changed.connect(_refresh_contracts)
+	GameState.contract_completed.connect(_on_contract_done)
 	GameState.legendary_found.connect(func():
 		_extract.text = "★ LEGENDARY EDGE UNLOCKED — your rounds hit harder."
 		get_tree().create_timer(5.0).timeout.connect(func(): _extract.text = ""))
@@ -202,6 +205,27 @@ func _refresh_score() -> void:
 		GameState.trophies_collected.size(), GameState.trophy_score]
 
 
+func _refresh_contracts() -> void:
+	if _contracts == null:
+		return
+	if GameState.contracts.is_empty():
+		_contracts.text = ""
+		return
+	var lines := ["CONTRACTS"]
+	for c in GameState.contracts:
+		var mark := "✓" if c["done"] else "•"
+		lines.append("%s %s  (%d/%d)" % [mark, c["desc"], int(c["progress"]), int(c["target"])])
+	_contracts.text = "\n".join(lines)
+
+
+func _on_contract_done(desc: String, reward: int) -> void:
+	_refresh_score()
+	_crit.text = "CONTRACT COMPLETE  +%d\n%s" % [reward, desc]
+	_crit.add_theme_color_override("font_color", Color(0.55, 0.82, 0.45))
+	_crit.visible = true
+	_crit_t = 2.2
+
+
 func _build() -> void:
 	# Crosshair
 	_cross = Label.new()
@@ -237,6 +261,11 @@ func _build() -> void:
 
 	_score = _make_label(Vector2(16, 128))
 	_add_control(_score)
+
+	_contracts = _make_label(Vector2(16, 160))
+	_contracts.add_theme_font_size_override("font_size", 13)
+	_add_control(_contracts)
+	_refresh_contracts()
 
 	_prompt = _make_label(Vector2(0, 0))
 	_prompt.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)

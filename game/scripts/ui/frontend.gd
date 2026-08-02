@@ -282,6 +282,7 @@ func _deploy() -> void:
 	GameState.score_purity = GameState.compute_purity()
 	GameState.last_result = {}
 	GameState.reset_session()
+	GameState.roll_contracts()
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 
@@ -305,6 +306,8 @@ func _populate_results() -> void:
 	_line(v, "The Ozark Dome holds — for now." if ok else "The dome claimed another hunter.", 14, DIM)
 	_spacer(v, 16)
 	_stat(v, "Trophies recovered", str(res.get("trophies", 0)))
+	if res.has("contracts_total"):
+		_stat(v, "Contracts completed", "%d / %d" % [res.get("contracts_done", 0), res.get("contracts_total", 0)])
 	_stat(v, "Raw score", str(res.get("raw", 0)))
 	_stat(v, "Score purity", "%d%%" % roundi(float(res.get("purity", 1.0)) * 100.0))
 	_stat(v, "FINAL SCORE", str(res.get("final", 0)), AMBER, 22)
