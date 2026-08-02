@@ -73,11 +73,7 @@ func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	set_anchors_preset(Control.PRESET_FULL_RECT)
 
-	var bg := ColorRect.new()
-	bg.color = Color(0.05, 0.06, 0.05)
-	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
-	add_child(bg)
-
+	_build_backdrop()
 	_build_main()
 	_build_setup()
 	_build_results()
@@ -97,6 +93,43 @@ func _ready() -> void:
 
 func _skip_to_game() -> void:
 	get_tree().change_scene_to_file(GAME_SCENE)
+
+
+## Dusk-gradient sky with a layered pine treeline silhouette — cheap atmosphere.
+func _build_backdrop() -> void:
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.10, 0.13, 0.20))   # dusk sky
+	grad.set_color(1, Color(0.03, 0.05, 0.05))   # forest dark
+	var gtex := GradientTexture2D.new()
+	gtex.gradient = grad
+	gtex.fill_from = Vector2(0, 0)
+	gtex.fill_to = Vector2(0, 1)
+	var bg := TextureRect.new()
+	bg.texture = gtex
+	bg.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	bg.stretch_mode = TextureRect.STRETCH_SCALE
+	bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	add_child(bg)
+	# Two silhouette treelines (far lighter, near darker) for depth.
+	_treeline(760.0, Color(0.06, 0.09, 0.10), 34.0, 90.0)
+	_treeline(880.0, Color(0.02, 0.04, 0.04), 46.0, 130.0)
+
+
+func _treeline(base_y: float, color: Color, step: float, max_h: float) -> void:
+	var rng := RandomNumberGenerator.new()
+	var poly := Polygon2D.new()
+	poly.color = color
+	var pts := PackedVector2Array()
+	var w := 2600.0
+	pts.append(Vector2(-40, base_y + 200))
+	var x := -40.0
+	while x < w:
+		pts.append(Vector2(x, base_y - rng.randf_range(max_h * 0.4, max_h)))  # pine peak
+		pts.append(Vector2(x + step * 0.5, base_y - rng.randf_range(2.0, max_h * 0.3)))
+		x += step
+	pts.append(Vector2(w, base_y + 200))
+	poly.polygon = pts
+	add_child(poly)
 
 
 func _capture_menu(ua: PackedStringArray) -> void:

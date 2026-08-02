@@ -357,6 +357,18 @@ func take_damage(amount: float, from_position: Vector3 = global_position, hit_po
 	return zone
 
 
+## A gunshot went off nearby — prey bolt, predators come to investigate.
+func hear_shot(from: Vector3) -> void:
+	if _state == State.DEAD:
+		return
+	_last_known_pos = from
+	_time_since_sensed = 0.0
+	if data.diet == CreatureData.Diet.HERBIVORE:
+		_change_state(State.FLEE)
+	elif _state in [State.IDLE, State.WANDER]:
+		_change_state(State.INVESTIGATE)
+
+
 func _deal_attack_damage() -> void:
 	if _target != null and _target.has_method("apply_damage"):
 		_target.apply_damage(data.attack_damage)

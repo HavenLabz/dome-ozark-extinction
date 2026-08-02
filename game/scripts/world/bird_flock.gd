@@ -16,10 +16,18 @@ var _t := 0.0
 ## bad weather so the flock drops to the ground and stops flapping.
 var shelter: float = 0.0
 var _shelter_smooth: float = 0.0
+var _startle: float = 0.0
+
+
+## A shot/nearby threat scatters the flock — take off and climb briefly.
+func startle() -> void:
+	_startle = 1.0
+	shelter = 0.0
 
 
 func _ready() -> void:
 	_rng.randomize()
+	add_to_group("birds")
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.12, 0.12, 0.14)
 	mat.roughness = 1.0
@@ -61,14 +69,15 @@ func _wing(bird: Node3D, mat: Material, side: float) -> void:
 
 func _process(delta: float) -> void:
 	_t += delta
+	_startle = maxf(0.0, _startle - delta * 0.5)
 	_shelter_smooth = move_toward(_shelter_smooth, clampf(shelter, 0.0, 1.0), delta * 0.4)
 	var grounded := _shelter_smooth
 	for i in _birds.size():
 		var p: Dictionary = _params[i]
 		# Slow the orbit to a near-stop as the birds come down to shelter.
-		var ang: float = p.phase + _t * p.speed * lerpf(1.0, 0.0, grounded)
+		var ang: float = p.phase + _t * p.speed * lerpf(1.0, 0.0, grounded) * (1.0 + _startle * 2.0)
 		var r: float = p.radius   # keep spread out; birds land where they were, not in a pile
-		var fly_y: float = p.height + sin(_t * 0.5 + p.phase) * 2.0
+		var fly_y: float = p.height + sin(_t * 0.5 + p.phase) * 2.0 + _startle * 10.0
 		# Perch just above the ground when sheltering.
 		var perch_y: float = -center.y + 1.2 + p.perch
 		var y: float = lerpf(fly_y, perch_y, grounded)

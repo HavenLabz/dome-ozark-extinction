@@ -38,7 +38,14 @@ enum FireMode { SEMI, AUTO }
 ## Aiming-down-sights tightens spread and reduces kick by this factor.
 @export var ads_factor: float = 0.35
 
-@export_group("Viewmodel (procedural placeholder)")
-## RIFLE or PISTOL silhouette built in code until real models arrive.
+@export_group("Viewmodel")
+## Drop in a real .gltf/.glb weapon here and it's used instead of the procedural
+## mesh. A child node named "Muzzle" (optional) marks the barrel tip.
+@export var model_scene: PackedScene
+## Per-model tuning knobs (asset scales/pivots vary) — nudge until it sits right.
+@export var model_scale: float = 1.0
+@export var model_offset: Vector3 = Vector3.ZERO
+@export var model_rotation: Vector3 = Vector3.ZERO   # degrees
+## Procedural fallback silhouette when no model_scene is set.
 @export_enum("RIFLE", "PISTOL") var body_style: String = "RIFLE"
 @export var tint: Color = Color(0.12, 0.12, 0.13)

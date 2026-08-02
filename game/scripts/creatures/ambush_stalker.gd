@@ -18,7 +18,7 @@ const ATTACK_CD := 1.3
 
 var _state: int = S.LURK
 var _t: float = 0.0
-var _health: float = 900.0
+var _health: float = 450.0   # tough, but killable in ~2 mags while it's surfaced
 var _attack_t: float = 0.0
 var _player: Node3D
 var _model: Node3D

@@ -488,8 +488,20 @@ func _handle_weapons(delta: float) -> void:
 		if wants_fire and w.try_fire(_ads):
 			_add_recoil(w.data)
 			add_shake(clampf(w.data.recoil_pitch * 6.0, 0.06, 0.4))
+			_alert_wildlife()
 
 	_recover_recoil(delta)
+
+
+## A shot rings out — nearby prey bolt, predators investigate, birds scatter.
+func _alert_wildlife() -> void:
+	var here := global_position
+	for c in get_tree().get_nodes_in_group("wildlife"):
+		if is_instance_valid(c) and c.has_method("hear_shot") and here.distance_to(c.global_position) < 80.0:
+			c.hear_shot(here)
+	var birds := get_tree().get_first_node_in_group("birds")
+	if birds and birds.has_method("startle"):
+		birds.startle()
 
 
 func _scan_through_binoculars() -> void:

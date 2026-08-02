@@ -377,6 +377,12 @@ func _build_viewmodel() -> void:
 	var sleeve := _mk_mat(Color(0.20, 0.26, 0.19), 0.0, 0.82)
 	var body := _mk_mat(data.tint, 0.55, 0.42)
 
+	# Real .gltf/.glb weapon drops in here; procedural mesh is the fallback.
+	if data.model_scene != null:
+		_build_model_viewmodel(glove, sleeve)
+		_build_optics_and_flash()
+		return
+
 	match data.body_style:
 		"PISTOL":
 			_rest_pos = Vector3(0.22, -0.20, -0.45)
@@ -447,6 +453,37 @@ func _build_viewmodel() -> void:
 			_muzzle = _point(Vector3(0, 0.03, -0.62))
 			_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
 
+	_build_optics_and_flash()
+
+
+## Instantiate a real weapon model as the viewmodel. Position/scale/rotation are
+## tuned per-weapon via the WeaponData knobs; a child node named "Muzzle" marks
+## the barrel tip if present, else a sensible default point is used. Gloved arms
+## are kept (set them off in the model itself if it ships its own hands).
+func _build_model_viewmodel(glove: Material, sleeve: Material) -> void:
+	if data.body_style == "PISTOL":
+		_rest_pos = Vector3(0.22, -0.20, -0.45)
+		_ads_pos = Vector3(0.0, -0.09, -0.28)
+	else:
+		_rest_pos = Vector3(0.26, -0.22, -0.55)
+		_ads_pos = Vector3(0.0, -0.115, -0.30)
+	var m := data.model_scene.instantiate() as Node3D
+	if m:
+		m.position = data.model_offset
+		m.scale = Vector3.ONE * data.model_scale
+		m.rotation_degrees = data.model_rotation
+		add_child(m)
+		_muzzle = m.find_child("Muzzle", true, false) as Node3D
+	if _muzzle == null:
+		_muzzle = _point(Vector3(0, 0.03, -0.6 if data.body_style != "PISTOL" else -0.2))
+	if data.body_style == "PISTOL":
+		_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
+	else:
+		_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
+
+
+## Optics + muzzle flash — shared by procedural and real-model viewmodels.
+func _build_optics_and_flash() -> void:
 	# Optic loadout (cycle with V).
 	match data.body_style:
 		"PISTOL", "SHOTGUN", "BOW":
