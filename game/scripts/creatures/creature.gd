@@ -47,6 +47,11 @@ var _speed_mult: float = 1.0
 ## (1.0 body, 1.25 vitals, 1.5 head) — applied to its trophy value on recovery.
 var _kill_bonus: float = 1.0
 var _call_t: float = 0.0            # ambient vocalization timer
+## A wounded animal flees, bleeds a trail you can track, and slowly bleeds out —
+## so a hit that doesn't drop it still rewards the hunter who follows.
+var _wounded: bool = false
+var _blood_accum: float = 0.0
+var _blood_last: Vector3
 ## The ground speed the CURRENT gait animation is meant for. The model's leg
 ## cycle is scaled to actual speed against this, so feet track the ground
 ## (no foot-sliding). 0 = not a locomotion state (idle/attack), don't scale.
@@ -106,6 +111,50 @@ func _physics_process(delta: float) -> void:
 
 	_maybe_drop_track(delta)
 	_maybe_call(delta)
+	_maybe_bleed(delta)
+
+
+## A wounded animal bleeds a trail and slowly bleeds out — track it to finish it.
+func _maybe_bleed(delta: float) -> void:
+	if not _wounded or _state == State.DEAD:
+		return
+	# Slow bleed-out (scaled to the animal's size), so a solid hit pays off even
+	# if it didn't drop on the spot.
+	_health = maxf(0.0, _health - data.max_health * 0.02 * delta)
+	health_changed.emit(_health, data.max_health)
+	if _health <= 0.0:
+		_die()
+		return
+	if not is_on_floor():
+		return
+	var flat := Vector2(global_position.x - _blood_last.x, global_position.z - _blood_last.z)
+	_blood_accum += flat.length()
+	_blood_last = global_position
+	if _blood_accum >= 2.0 and Vector2(velocity.x, velocity.z).length() > 0.4:
+		_blood_accum = 0.0
+		_spawn_blood()
+
+
+## A fading blood splash on the ground the player can follow.
+func _spawn_blood() -> void:
+	var fp := MeshInstance3D.new()
+	var q := QuadMesh.new()
+	q.size = Vector2(0.35, 0.35)
+	fp.mesh = q
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.45, 0.03, 0.02, 0.85)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	fp.material_override = mat
+	var host := get_tree().current_scene
+	if host == null:
+		host = get_parent()
+	host.add_child(fp)
+	fp.global_position = global_position + Vector3.UP * 0.03
+	fp.rotation = Vector3(-PI * 0.5, _rng.randf_range(0.0, TAU), 0.0)
+	var tw := fp.create_tween()
+	tw.tween_interval(30.0)
+	tw.tween_property(mat, "albedo_color:a", 0.0, 10.0)
+	tw.tween_callback(fp.queue_free)
 
 
 ## Occasional positional vocalization — herbivores chirp, predators roar (pitch
@@ -293,6 +342,9 @@ func take_damage(amount: float, from_position: Vector3 = global_position, hit_po
 	health_changed.emit(_health, data.max_health)
 	_last_known_pos = from_position
 	_time_since_sensed = 0.0
+	if not _wounded:
+		_blood_last = global_position
+	_wounded = true
 	if _health <= 0.0:
 		_die()
 		return zone
