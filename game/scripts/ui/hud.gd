@@ -15,6 +15,10 @@ var _hit_t: float = 0.0
 var _crit: Label
 var _crit_t: float = 0.0
 var _contracts: Label
+var _vignette: ColorRect
+var _vig_pulse: float = 0.0
+var _ch_ticks: Array[ColorRect] = []
+var _bound_player: Node
 var _cross: Label
 var _scope: Control
 var _bound_weapon: Weapon
@@ -54,6 +58,7 @@ func _hook_player() -> void:
 	var player := get_tree().get_first_node_in_group("player")
 	if player == null:
 		return
+	_bound_player = player
 	if player.has_signal("interact_prompt_changed"):
 		player.interact_prompt_changed.connect(_on_prompt_changed)
 	if player.has_signal("weapon_changed"):
@@ -64,6 +69,8 @@ func _hook_player() -> void:
 		player.hitmarker.connect(_on_hitmarker)
 	if player.has_signal("crit_hit"):
 		player.crit_hit.connect(_on_crit)
+	if player.has_signal("damaged"):
+		player.damaged.connect(func(_a): _vig_pulse = 0.8)
 	if player.has_signal("scope_changed"):
 		player.scope_changed.connect(_on_scope_changed)
 	# The initial weapon_changed fired during the player's _ready (before this
@@ -187,6 +194,27 @@ func _process(delta: float) -> void:
 		_crit.modulate.a = clampf(_crit_t / 1.1, 0.0, 1.0)
 		if _crit_t <= 0.0:
 			_crit.visible = false
+	if _vignette:
+		_vig_pulse = maxf(0.0, _vig_pulse - delta * 1.6)
+		var low := clampf((35.0 - GameState.health) / 35.0, 0.0, 0.75)  # persistent when hurt
+		_vignette.material.set_shader_parameter("strength", maxf(low, _vig_pulse))
+	_update_crosshair()
+
+
+## Spread the crosshair ticks with the active weapon's current inaccuracy.
+func _update_crosshair() -> void:
+	if _ch_ticks.is_empty():
+		return
+	var gap := 8.0
+	if _bound_player and _bound_player.has_method("get_active_weapon"):
+		var w = _bound_player.get_active_weapon()
+		if w and w.has_method("current_spread"):
+			gap = 6.0 + clampf(w.current_spread(false) * 900.0, 0.0, 40.0)
+	# order: up, down, left, right
+	_ch_ticks[0].position = Vector2(-1, -gap - 7)
+	_ch_ticks[1].position = Vector2(-1, gap)
+	_ch_ticks[2].position = Vector2(-gap - 7, -1)
+	_ch_ticks[3].position = Vector2(gap, -1)
 
 
 func _on_prompt_changed(text: String) -> void:
@@ -227,6 +255,16 @@ func _on_contract_done(desc: String, reward: int) -> void:
 
 
 func _build() -> void:
+	# Damage vignette — reddens the screen edges when hurt / low on health.
+	_vignette = ColorRect.new()
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var vmat := ShaderMaterial.new()
+	vmat.shader = load("res://shaders/vignette.gdshader")
+	vmat.set_shader_parameter("strength", 0.0)
+	_vignette.material = vmat
+	_add_control(_vignette)
+
 	# Crosshair
 	_cross = Label.new()
 	_cross.text = "+"
@@ -235,6 +273,17 @@ func _build() -> void:
 	_cross.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_cross.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 	_add_control(_cross)
+
+	# Dynamic crosshair ticks — spread apart as accuracy drops.
+	for i in 4:
+		var tick := ColorRect.new()
+		tick.color = Color(0.9, 0.95, 0.9, 0.85)
+		tick.set_anchors_preset(Control.PRESET_CENTER)
+		var vertical := i < 2
+		tick.size = Vector2(2, 7) if vertical else Vector2(7, 2)
+		tick.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_ch_ticks.append(tick)
+		_add_control(tick)
 
 	# Hitmarker — flashes over the crosshair when a shot connects.
 	_hitmark = Label.new()

@@ -313,6 +313,39 @@ func _spawn_impact(pos: Vector3, normal: Vector3, on_creature: bool) -> void:
 	tw.tween_property(mi, "scale", Vector3(2.2, 2.2, 2.2), 0.18)
 	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.18)
 	tw.tween_callback(mi.queue_free)
+	if on_creature:
+		_blood_spray(host, pos, normal)
+
+
+## A short burst of blood droplets kicking back along the shot normal.
+func _blood_spray(host: Node, pos: Vector3, normal: Vector3) -> void:
+	var p := GPUParticles3D.new()
+	p.amount = 16
+	p.lifetime = 0.6
+	p.one_shot = true
+	p.explosiveness = 1.0
+	var pm := ParticleProcessMaterial.new()
+	pm.direction = normal
+	pm.spread = 55.0
+	pm.initial_velocity_min = 3.0
+	pm.initial_velocity_max = 7.0
+	pm.gravity = Vector3(0, -14, 0)
+	pm.scale_min = 0.03
+	pm.scale_max = 0.08
+	p.process_material = pm
+	var mesh := SphereMesh.new()
+	mesh.radius = 0.5
+	mesh.height = 1.0
+	mesh.radial_segments = 4
+	mesh.rings = 2
+	var bm := StandardMaterial3D.new()
+	bm.albedo_color = Color(0.5, 0.03, 0.02)
+	mesh.material = bm
+	p.draw_pass_1 = mesh
+	host.add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	p.finished.connect(p.queue_free)
 
 
 func _apply_viewmodel_kick(ads: bool) -> void:

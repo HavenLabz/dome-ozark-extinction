@@ -65,13 +65,25 @@ var _recoil_yaw: float = 0.0
 var _flashlight: SpotLight3D
 var _step_t: float = 0.0
 var _blinds_built: int = 0
+var _shake: float = 0.0            # camera trauma (fire/impact), decays
+var _bob_t: float = 0.0            # head-bob phase
+var _base_cam_pos: Vector3
 var _rng := RandomNumberGenerator.new()
+
+## Emitted when the player is hurt, so the HUD can flash a damage vignette.
+signal damaged(amount: float)
+
+
+## Add camera trauma (screen shake). Clamped so it can't runaway.
+func add_shake(amount: float) -> void:
+	_shake = minf(1.0, _shake + amount)
 
 
 func _ready() -> void:
 	add_to_group("player")
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	camera.fov = default_fov
+	_base_cam_pos = camera.position
 	_build_weapons()
 	# Flashlight gear (toggle L) — points where you look; off by default.
 	_flashlight = SpotLight3D.new()
@@ -290,6 +302,23 @@ func _physics_process(delta: float) -> void:
 	_update_interact_prompt()
 	_handle_weapons(delta)
 	_handle_footsteps(delta)
+	_update_camera_fx(delta)
+
+
+## Screen shake + subtle head-bob, applied as a camera-local offset each frame.
+func _update_camera_fx(delta: float) -> void:
+	_shake = maxf(0.0, _shake - delta * 1.8)
+	var shake := Vector3.ZERO
+	if _shake > 0.0:
+		var s := _shake * _shake * 0.12
+		shake = Vector3(_rng.randf_range(-1, 1), _rng.randf_range(-1, 1), 0.0) * s
+	var bob := Vector3.ZERO
+	var speed := Vector2(velocity.x, velocity.z).length()
+	if is_on_floor() and speed > 0.6 and not _ads:
+		_bob_t += delta * (10.0 if _is_sprinting else 7.0)
+		var amp := (0.035 if _is_sprinting else 0.02)
+		bob = Vector3(cos(_bob_t) * amp, absf(sin(_bob_t)) * amp, 0.0)
+	camera.position = _base_cam_pos + shake + bob
 
 
 func _handle_footsteps(delta: float) -> void:
@@ -378,6 +407,8 @@ func is_making_noise() -> bool:
 ## Damage entry point — creatures call this when they land a hit.
 func apply_damage(amount: float) -> void:
 	GameState.apply_damage(amount)
+	add_shake(clampf(amount / 40.0, 0.15, 0.6))
+	damaged.emit(amount)
 
 
 # ---------------------------------------------------------------------------
@@ -434,6 +465,8 @@ func _handle_weapons(delta: float) -> void:
 	var target_fov := default_fov
 	if _ads and w != null:
 		target_fov = w.optic_fov() * (0.85 if _holding_breath else 1.0)
+	elif _is_sprinting:
+		target_fov = default_fov + 8.0   # speed-rush FOV kick
 	camera.fov = lerpf(camera.fov, target_fov, clampf(delta * 12.0, 0.0, 1.0))
 
 	# Scope overlay when aiming a scoped optic; the viewmodel hides so it reads clean.
@@ -454,6 +487,7 @@ func _handle_weapons(delta: float) -> void:
 			wants_fire = Input.is_action_just_pressed("fire")
 		if wants_fire and w.try_fire(_ads):
 			_add_recoil(w.data)
+			add_shake(clampf(w.data.recoil_pitch * 6.0, 0.06, 0.4))
 
 	_recover_recoil(delta)
 
