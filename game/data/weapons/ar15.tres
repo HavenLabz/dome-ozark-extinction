@@ -1,9 +1,14 @@
-[gd_resource type="Resource" script_class="WeaponData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="WeaponData" load_steps=3 format=3]
 
 [ext_resource type="Script" path="res://scripts/weapons/weapon_data.gd" id="1"]
+[ext_resource type="PackedScene" path="res://assets/weapons/ar15.glb" id="2"]
 
 [resource]
 script = ExtResource("1")
+model_scene = ExtResource("2")
+model_scale = 0.1
+model_offset = Vector3(0.02, -0.12, -0.05)
+model_rotation = Vector3(0, 90, 0)
 weapon_id = &"ar15"
 display_name = "AR-15"
 damage = 34.0

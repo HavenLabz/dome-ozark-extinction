@@ -1,0 +1,3 @@
+Weapon models via poly.pizza:
+  ar15.glb, pistol.glb, shotgun.glb — Quaternius (CC0, public domain).
+  kar98.glb — 'Kar98k' by AdamKokrito (CC-BY).
