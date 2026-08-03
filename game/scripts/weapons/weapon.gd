@@ -476,10 +476,8 @@ func _build_model_viewmodel(glove: Material, sleeve: Material) -> void:
 		_muzzle = m.find_child("Muzzle", true, false) as Node3D
 	if _muzzle == null:
 		_muzzle = _point(Vector3(0, 0.03, -0.6 if data.body_style != "PISTOL" else -0.2))
-	if data.body_style == "PISTOL":
-		_build_arms(Vector3(0.0, -0.085, 0.06), Vector3(-0.045, -0.10, 0.02), glove, sleeve)
-	else:
-		_build_arms(Vector3(0.0, -0.095, 0.14), Vector3(0.0, -0.045, -0.28), glove, sleeve)
+	# No procedural arms on real models — the boxy hands clash. (Kept the params
+	# so the procedural fallback still gets them.)
 
 
 ## Optics + muzzle flash — shared by procedural and real-model viewmodels.
