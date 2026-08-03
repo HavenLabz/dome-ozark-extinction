@@ -44,7 +44,17 @@ var _mag: MeshInstance3D         # the magazine, animated during reload
 var _mag_rest: Vector3           # its resting local position
 var _suppressed: bool = false    # deployment attachment: quieter, slightly weaker
 var _foregrip: bool = false      # deployment attachment: tighter spread + less kick
+var _sway: Vector2 = Vector2.ZERO
+var _bob_t: float = 0.0
+var _idle_t: float = 0.0
+var _player_ref: Node3D
 var _rng := RandomNumberGenerator.new()
+
+
+func _player() -> Node3D:
+	if _player_ref == null or not is_instance_valid(_player_ref):
+		_player_ref = get_tree().get_first_node_in_group("player") as Node3D
+	return _player_ref
 
 
 func _ready() -> void:
@@ -117,8 +127,31 @@ func _process(delta: float) -> void:
 	elif _mag:
 		_mag.position = _mag_rest
 
-	position = _rest_pos.lerp(_ads_pos, _aim_blend) + _kick_pos + reload_dip
-	rotation.x = _kick_rot + reload_tilt
+	# --- CoD-style feel: look-sway + walk-bob + idle breathe, damped when ADS ---
+	var ads_scale := lerpf(1.0, 0.25, _aim_blend)   # steady the gun when aiming
+	# Sway: the gun lags behind mouse-look, then eases back.
+	var mv := Input.get_last_mouse_velocity()
+	var sway_target := Vector2(clampf(-mv.x, -900.0, 900.0), clampf(-mv.y, -900.0, 900.0)) * 0.00004 * ads_scale
+	_sway = _sway.lerp(sway_target, clampf(delta * 9.0, 0.0, 1.0))
+	# Bob: while moving on the ground, plus a subtle idle breathe otherwise.
+	var pl := _player()
+	var speed := 0.0
+	var grounded := false
+	if pl:
+		speed = Vector2(pl.velocity.x, pl.velocity.z).length()
+		grounded = pl.is_on_floor()
+	var bob := Vector3.ZERO
+	if grounded and speed > 0.6:
+		_bob_t += delta * (6.0 + speed * 1.4)
+		var amp := 0.014 * clampf(speed / 6.0, 0.2, 1.3) * ads_scale
+		bob = Vector3(cos(_bob_t) * amp, absf(sin(_bob_t)) * amp * 0.7, 0.0)
+	else:
+		_bob_t = 0.0
+		bob.y = sin(_idle_t) * 0.0025 * ads_scale
+	_idle_t += delta * 1.6
+
+	position = _rest_pos.lerp(_ads_pos, _aim_blend) + _kick_pos + reload_dip + bob + Vector3(_sway.x, _sway.y, 0.0)
+	rotation = Vector3(_kick_rot + reload_tilt + _sway.y * 3.0, -_sway.x * 3.0, _sway.x * 2.0)
 
 	# Muzzle flash timeout.
 	if _flash_t > 0.0:
@@ -476,8 +509,42 @@ func _build_model_viewmodel(glove: Material, sleeve: Material) -> void:
 		_muzzle = m.find_child("Muzzle", true, false) as Node3D
 	if _muzzle == null:
 		_muzzle = _point(Vector3(0, 0.03, -0.6 if data.body_style != "PISTOL" else -0.2))
-	# No procedural arms on real models — the boxy hands clash. (Kept the params
-	# so the procedural fallback still gets them.)
+	_grip_hand(data.hand_offset, glove)
+
+
+## A rounded gloved support hand gripping the handguard (spheres/capsules, not
+## boxes) — sells "held" without the old blocky look. Position via hand_offset.
+func _grip_hand(pos: Vector3, mat: Material) -> void:
+	var hand := Node3D.new()
+	hand.position = pos
+	add_child(hand)
+	var palm := MeshInstance3D.new()
+	var sm := SphereMesh.new()
+	sm.radius = 0.05
+	sm.height = 0.09
+	palm.mesh = sm
+	palm.scale = Vector3(1.0, 0.75, 1.35)
+	palm.material_override = mat
+	hand.add_child(palm)
+	for i in 4:
+		var f := MeshInstance3D.new()
+		var cap := CapsuleMesh.new()
+		cap.radius = 0.013
+		cap.height = 0.07
+		f.mesh = cap
+		f.material_override = mat
+		f.rotation.x = PI * 0.5          # lie fingers forward over the grip
+		f.position = Vector3(-0.032 + i * 0.021, 0.03, -0.015)
+		hand.add_child(f)
+	var thumb := MeshInstance3D.new()
+	var tc := CapsuleMesh.new()
+	tc.radius = 0.013
+	tc.height = 0.06
+	thumb.mesh = tc
+	thumb.material_override = mat
+	thumb.rotation.z = PI * 0.5
+	thumb.position = Vector3(0.04, 0.015, 0.01)
+	hand.add_child(thumb)
 
 
 ## Optics + muzzle flash — shared by procedural and real-model viewmodels.

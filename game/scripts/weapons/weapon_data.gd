@@ -46,6 +46,8 @@ enum FireMode { SEMI, AUTO }
 @export var model_scale: float = 1.0
 @export var model_offset: Vector3 = Vector3.ZERO
 @export var model_rotation: Vector3 = Vector3.ZERO   # degrees
+## Where the gloved support hand grips the model (weapon-local). Tune per weapon.
+@export var hand_offset: Vector3 = Vector3(0.0, -0.05, -0.26)
 ## Procedural fallback silhouette when no model_scene is set.
 @export_enum("RIFLE", "PISTOL") var body_style: String = "RIFLE"
 @export var tint: Color = Color(0.12, 0.12, 0.13)

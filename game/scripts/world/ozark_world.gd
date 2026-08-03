@@ -158,6 +158,7 @@ func _ready() -> void:
 	_place_player()
 	_spawn_wildlife()
 	_spawn_ambush()
+	_spawn_flyers()
 	_end_loading()
 
 	# 5. The dome's own weather ecosystem — wind, rain, storms, floods, tornadoes.
@@ -310,6 +311,33 @@ func _spawn_ambush() -> void:
 	var z := _rng.randf_range(-half, half)
 	var p := terrain.surface_point(x, z)
 	stalker.global_position = Vector3(p.x, p.y - 6.0, p.z)
+
+
+## Soaring aerial creatures (dragon, phoenix, pterodactyl) circling the dome —
+## shoot them down for big trophies. [path, wingspan, count, altitude, radius,
+## trophy_id, trophy_value, hp, call_sound]
+func _spawn_flyers() -> void:
+	var kinds := [
+		["res://assets/creatures/dragon.glb", 26.0, 1, 80.0, 135.0, &"dragon_trophy", 1500, 400.0, "roar"],
+		["res://assets/creatures/phoenix.glb", 16.0, 2, 62.0, 105.0, &"phoenix_trophy", 800, 160.0, "screech"],
+		["res://assets/creatures/pterodactyl.glb", 12.0, 3, 52.0, 90.0, &"ptero_trophy", 400, 120.0, "screech"],
+	]
+	for k in kinds:
+		if not ResourceLoader.exists(k[0]):
+			continue
+		for i in int(k[2]):
+			var f := AerialCreature.new()
+			f.model_path = k[0]
+			f.wingspan = k[1]
+			f.altitude = k[3] + i * 8.0
+			f.radius = k[4] - i * 12.0
+			f.ang_speed = _rng.randf_range(0.06, 0.12) * (1.0 if i % 2 == 0 else -1.0)
+			f.center = Vector3(0, 0, 0)
+			f.trophy_id = k[5]
+			f.trophy_value = int(k[6])
+			f.hp = k[7]
+			f.call_sound = k[8]
+			creatures_root.add_child(f)
 
 
 ## Hidden supply caches tucked in the deep woods — find them all for the
