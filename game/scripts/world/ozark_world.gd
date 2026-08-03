@@ -238,6 +238,21 @@ func _capture_screenshot() -> void:
 		get_tree().quit()
 		return
 
+	# Debug: third-person camera behind the player to verify the FP-legs character.
+	if "--shotlegs" in args:
+		var pl2 := get_tree().get_first_node_in_group("player") as Node3D
+		var cam2 := Camera3D.new()
+		add_child(cam2)
+		if pl2:
+			cam2.global_position = pl2.global_position + Vector3(2.2, 0.6, 2.2)
+			cam2.look_at(pl2.global_position + Vector3(0, 0.9, 0), Vector3.UP)
+		cam2.current = true
+		await get_tree().create_timer(2.5).timeout
+		var img2 := get_viewport().get_texture().get_image()
+		img2.save_png(path)
+		get_tree().quit()
+		return
+
 	# Weapon shot: use the player's own camera (which holds the viewmodel).
 	if "--shotweapon" in args:
 		var wi := args.find("--wpn")

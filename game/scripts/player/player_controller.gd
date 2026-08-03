@@ -69,6 +69,12 @@ var _shake: float = 0.0            # camera trauma (fire/impact), decays
 var _bob_t: float = 0.0            # head-bob phase
 var _base_cam_pos: Vector3
 var _rng := RandomNumberGenerator.new()
+# First-person legs from the rigged character, walked procedurally (the model
+# ships with no locomotion clips). Upper body hidden so it never clips the cam.
+var _skel: Skeleton3D
+var _leg_bones := {}          # key -> {"idx": int, "rest": Quaternion}
+var _stride: float = 0.0
+var _force_pose: bool = false  # debug: --shotlegs keeps upper body + walks in place
 
 ## Emitted when the player is hurt, so the HUD can flash a damage vignette.
 signal damaged(amount: float)
@@ -100,43 +106,90 @@ func _ready() -> void:
 ## A first-person clothed body — torso, legs, boots — parented to the yaw head so
 ## it turns with you but stays upright when you look down (you see your own gear).
 func _build_body() -> void:
-	var jacket := StandardMaterial3D.new()
-	jacket.albedo_color = Color(0.19, 0.24, 0.18)   # olive field jacket
-	jacket.roughness = 0.85
-	var pants := StandardMaterial3D.new()
-	pants.albedo_color = Color(0.28, 0.26, 0.20)    # tan cargo pants
-	pants.roughness = 0.9
-	var boots := StandardMaterial3D.new()
-	boots.albedo_color = Color(0.08, 0.07, 0.06)
-	boots.roughness = 0.7
-	var vest := StandardMaterial3D.new()
-	vest.albedo_color = Color(0.10, 0.11, 0.10)     # chest rig
-	vest.roughness = 0.8
-
-	var body := Node3D.new()
+	var scene := load("res://assets/character.glb") as PackedScene
+	if scene == null:
+		return
+	var body := scene.instantiate() as Node3D
 	body.name = "FPBody"
-	# Hang below the eye line; the head node sits at eye height.
-	body.position = Vector3(0.0, -0.15, 0.0)
 	head.add_child(body)
+	# Fit to ~1.85m from the model's actual assembled size, feet on the ground.
+	var box := _model_local_aabb(body, Transform3D.IDENTITY)
+	var s := 1.85 / maxf(box.size.y, 0.01)
+	body.scale = Vector3(s, s, s)
+	body.position = Vector3(0.0, -_EYE_Y[Stance.STAND] - box.position.y * s, 0.12)
+	body.rotation.y = PI          # face the way we look (-Z)
 
-	_body_box(body, Vector3(0.42, 0.5, 0.26), Vector3(0.0, -0.62, 0.05), jacket)   # torso
-	_body_box(body, Vector3(0.34, 0.22, 0.2), Vector3(0.0, -0.5, 0.02), vest)      # chest rig
-	# Legs + boots (slightly splayed).
-	for s in [-1.0, 1.0]:
-		_body_box(body, Vector3(0.16, 0.6, 0.18), Vector3(s * 0.12, -1.2, 0.02), pants)
-		_body_box(body, Vector3(0.17, 0.14, 0.3), Vector3(s * 0.12, -1.55, -0.04), boots)
+	_skel = body.find_child("Skeleton3D", true, false) as Skeleton3D
+	if _skel == null:
+		return
+	# Stop the imported AnimationPlayer (it only holds an A-pose) so our manual
+	# bone poses actually stick.
+	var ap := body.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	if ap:
+		ap.active = false
+	# Hide the upper body (spine → torso/arms/head) so the FP camera stays clean —
+	# only hips + legs remain, CoD-style first-person legs.
+	_force_pose = "--shotlegs" in OS.get_cmdline_user_args()
+	var sp := _skel.find_bone("spine1_01")
+	if sp >= 0 and not _force_pose:
+		_skel.set_bone_pose_scale(sp, Vector3(0.001, 0.001, 0.001))
+	# Cache leg bones + their rest rotations for the procedural walk.
+	for key in {"lthigh": "l leg_047", "rthigh": "r leg_051", "lknee": "l knee_048", "rknee": "r knee_052"}:
+		var idx := _skel.find_bone({"lthigh": "l leg_047", "rthigh": "r leg_051", "lknee": "l knee_048", "rknee": "r knee_052"}[key])
+		if idx >= 0:
+			_leg_bones[key] = {"idx": idx, "rest": _skel.get_bone_pose_rotation(idx)}
 
 
-func _body_box(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> void:
-	var mi := MeshInstance3D.new()
-	var b := BoxMesh.new()
-	b.size = size
-	mi.mesh = b
-	mi.position = pos
-	mi.material_override = mat
-	# Don't let the body block the camera's near plane when looking straight down.
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
-	parent.add_child(mi)
+## Combined mesh AABB of a model in its own local space (no tree needed).
+func _model_local_aabb(node: Node, xf: Transform3D) -> AABB:
+	var acc := {}
+	_accum_model_aabb(node, xf, acc)
+	return acc.get("b", AABB(Vector3.ZERO, Vector3.ONE))
+
+
+func _accum_model_aabb(node: Node, xf: Transform3D, acc: Dictionary) -> void:
+	var lx := xf
+	if node is Node3D:
+		lx = xf * (node as Node3D).transform
+	if node is MeshInstance3D and (node as MeshInstance3D).mesh:
+		var b: AABB = lx * (node as MeshInstance3D).mesh.get_aabb()
+		acc["b"] = (acc["b"] as AABB).merge(b) if acc.has("b") else b
+	for c in node.get_children():
+		_accum_model_aabb(c, lx, acc)
+
+
+## Procedural walk/run cycle on the FP legs — thighs swing opposite, knees bend
+## on the back-swing, amplitude scales with speed. (Real Mixamo clips would drop
+## in over this.) ponytail: flexion axis is X; tune sign if a leg bends backward.
+func _animate_legs(delta: float) -> void:
+	if _skel == null or _leg_bones.is_empty():
+		return
+	var speed := Vector2(velocity.x, velocity.z).length()
+	var moving := is_on_floor() and speed > 0.4 and _stance != Stance.PRONE
+	if moving:
+		_stride += delta * (4.0 + speed * 1.3)
+	if _force_pose:
+		_stride = PI * 0.5   # debug: freeze at max leg-split to check the axis
+	var amp := (0.7 if _force_pose else clampf(speed / 6.0, 0.0, 1.0) * 0.7)
+	var sw := sin(_stride) * amp
+	_pose_leg("lthigh", sw)
+	_pose_leg("rthigh", -sw)
+	_pose_leg("lknee", maxf(0.0, -sw) * 1.1)
+	_pose_leg("rknee", maxf(0.0, sw) * 1.1)
+
+
+func _pose_leg(key: String, angle: float) -> void:
+	var b: Dictionary = _leg_bones.get(key, {})
+	if b.is_empty():
+		return
+	var idx: int = b["idx"]
+	# Flex about the skeleton's left-right axis (X) so the leg swings fore/aft.
+	# That world axis, expressed in the parent bone's frame, is what a local pose
+	# rotation must use — the bone's own local X points down the limb (twist).
+	var pidx := _skel.get_bone_parent(idx)
+	var pbasis := (_skel.get_bone_global_pose(pidx).basis if pidx >= 0 else Basis())
+	var axis := (pbasis.inverse() * Vector3.RIGHT).normalized()
+	_skel.set_bone_pose_rotation(idx, Quaternion(axis, angle) * (b["rest"] as Quaternion))
 
 
 func _build_weapons() -> void:
@@ -302,6 +355,7 @@ func _physics_process(delta: float) -> void:
 	_update_interact_prompt()
 	_handle_weapons(delta)
 	_handle_footsteps(delta)
+	_animate_legs(delta)
 	_update_camera_fx(delta)
 
 

@@ -233,34 +233,42 @@ func _synth_thunder() -> PackedFloat32Array:
 	return s
 
 
-func _synth_wind() -> PackedFloat32Array:
-	var len := int(RATE * 2.0)
+## Build a click-free, dip-free loop of `len` samples from `raw` (which must hold
+## len+xf samples). The final `xf` samples are the buffer's own natural continuation
+## past the loop point, crossfaded over the head — so s[len-1]->s[0] is continuous
+## (no click) with no fade-to-silence at the seam (no pulsing).
+func _seamless(raw: PackedFloat32Array, len: int, xf: int) -> PackedFloat32Array:
 	var s := _n(len)
-	var lp := 0.0
 	for i in len:
-		lp = lerpf(lp, _rng.randf_range(-1.0, 1.0), 0.02)
-		var gust := 0.6 + 0.4 * sin(i / float(len) * TAU)
-		s[i] = lp * gust
-	# Feather the seam so the loop doesn't click.
-	var fade := int(RATE * 0.05)
-	for i in fade:
-		var g := i / float(fade)
-		s[i] *= g
-		s[len - 1 - i] *= g
+		s[i] = raw[i]
+	for i in xf:
+		var w := i / float(xf)                       # 0 at seam -> 1 by end of xf
+		s[i] = raw[i] * w + raw[len + i] * (1.0 - w)
 	return s
+
+
+func _synth_wind() -> PackedFloat32Array:
+	# Long buffer + non-periodic gusting so there's no audible repeat cadence.
+	var len := int(RATE * 4.0)
+	var xf := int(RATE * 0.4)
+	var raw := _n(len + xf)
+	var lp := 0.0
+	var drift := 0.0
+	for i in len + xf:
+		lp = lerpf(lp, _rng.randf_range(-1.0, 1.0), 0.02)
+		drift = lerpf(drift, _rng.randf_range(-1.0, 1.0), 0.0015)   # slow random gusts, not a sine
+		var gust := 0.55 + 0.35 * (0.5 + 0.5 * drift)
+		raw[i] = lp * gust
+	return _seamless(raw, len, xf)
 
 
 func _synth_rain() -> PackedFloat32Array:
-	var len := int(RATE * 1.0)
-	var s := _n(len)
+	var len := int(RATE * 3.0)
+	var xf := int(RATE * 0.3)
+	var raw := _n(len + xf)
 	var hp := 0.0
-	for i in len:
+	for i in len + xf:
 		var white := _rng.randf_range(-1.0, 1.0)
 		hp = white - lerpf(hp, white, 0.5)   # crude high-pass hiss
-		s[i] = hp * 0.7
-	var fade := int(RATE * 0.03)
-	for i in fade:
-		var g := i / float(fade)
-		s[i] *= g
-		s[len - 1 - i] *= g
-	return s
+		raw[i] = hp * 0.7
+	return _seamless(raw, len, xf)
