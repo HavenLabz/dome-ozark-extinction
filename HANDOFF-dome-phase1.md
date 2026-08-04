@@ -3,6 +3,24 @@ _Last session: 2026-07-31 → 2026-08-01. Engine: Godot 4.7.1 (bundled at `../..
 
 Addressed to the **next dev session**. Read `docs/NORTH_STAR.md` + `docs/DECISIONS_LOG.md` first, then this.
 
+---
+## SESSION 2026-08-03 (latest — read first)
+Branch `phase1-creatures-visuals`, HEAD **`85b954e`**, pushed & remote-verified. Smoke **13/13**. Fresh Windows exe at `game/dist/DOME-Ozark-Extinction.exe` (~397 MB, rebuilt 19:10 — contains all fixes; NOT in git, it's the build artifact).
+
+**DONE this session:**
+- **Ambush stalker no longer erupts on the player** (`game/scripts/creatures/ambush_stalker.gd`). Root cause: it homed to the player's *exact* XZ underground and surfaced inside the camera — invisible, unshootable, 3-hit kill. Fix: holds a `STANDOFF` (5 m) while lurking, snaps to a visible `EMERGE_STANDOFF` (9 m) surface point before erupting, keeps `MELEE_RANGE` 5 m so it stays shootable, `REGROUP` 3 s between strikes, `DAMAGE` 34→22. It's invisible underground so the pre-eruption XZ snap reads as an ambush, not a teleport.
+- **Wind ambience no longer reads as looping "waves"** (`game/scripts/autoload/sound_manager.gd`). Two passes: first added a seamless crossfade loop (`_seamless`) killing the click; then replaced the swelling gust envelope with a **steady band-limited hiss** (no amplitude envelope) — the swell was what pulsed like waves on every loop. Rain got the same crossfade. **If the old build still sounded wavy, it predated the fix — the 19:10 exe is correct.**
+- **First-person procedural leg walk** (earlier this session, commit `7e8a3b7`): `player_controller.gd` loads `assets/character.glb`, disables its A-pose AnimationPlayer, drives a procedural walk (flex about skeleton-space X via parent-bone frame — `_pose_leg`). `--shotlegs` debug harness kept.
+- **Mixamo pipeline set up:** installed **Blender 5.2** (`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`) and **uv** (both via winget). `tools/glb_to_fbx.py` converts the character; produced `C:\Users\Jamon\Desktop\DOME Ozark Extinction\character.fbx` (50 MB) ready for Mixamo upload.
+
+**LEFT / next:**
+- **Mixamo (Jamon's hands):** upload `character.fbx`, apply rifle Idle/Walk/Run (In Place), download FBX (30fps, keyframe none; With Skin on first, Without Skin on rest) into `game/assets/anims/`. Then next session wires them to the AnimationPlayer and **deletes the procedural walk**.
+- **BlenderMCP:** addon extracted at `blender-mcp-extracted/blender-mcp-main/addon.py`; NOT yet registered in Claude config and won't load until an app restart. Install addon in Blender → enable → N-panel → Connect to Claude; register with `claude mcp add`; restart. Not on the critical path (headless Blender handles conversions).
+- Verify licenses of user-supplied GLBs (character, dragon/phoenix/pterodactyl) before commercial ship.
+
+**Scope not touched this session:** creature AI FSM, world gen, weapons, UI, shaders — all untouched. No master merge / production deploy.
+
+---
 ## TL;DR
 Phase 1 vertical slice is **playable and validated**: first-person player, procedural navigable Ozark world, data-driven creature AI (herbivore + predator), working hunt→trophy loop, and a real stylized visual pass (shaders, animated procedural dinosaurs, grass, water, birds). Behavioral smoke test: **10/10**.
 
