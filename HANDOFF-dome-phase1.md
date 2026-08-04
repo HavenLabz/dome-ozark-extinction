@@ -5,7 +5,8 @@ Addressed to the **next dev session**. Read `docs/NORTH_STAR.md` + `docs/DECISIO
 
 ---
 ## SESSION 2026-08-03 (latest — read first)
-Branch `phase1-creatures-visuals`, HEAD **`85b954e`**, pushed & remote-verified. Smoke **13/13**. Fresh Windows exe at `game/dist/DOME-Ozark-Extinction.exe` (~397 MB, rebuilt 19:10 — contains all fixes; NOT in git, it's the build artifact).
+**PRODUCTION MERGE DONE (Jamon-approved):** `origin/main` is now **`6e12121`** = the current game. Done via `-s ours` merge so old main (`6ba5355`, early scaffold + reference-only Three.js prototype) is preserved as a parent — NO force-push, fully recoverable. `main` and `phase1-creatures-visuals` both point at `6e12121`, pushed & remote-verified. Smoke **13/13**. Fresh Windows exe at `game/dist/DOME-Ozark-Extinction.exe` (~397 MB, rebuilt 19:10 — contains all fixes; NOT in git, it's the build artifact).
+_Note: this branch's tree already carried the prototype files (index.html/src/public/vite.config.js) from the source zip, so main has them too — reference-only, harmless._
 
 **DONE this session:**
 - **Ambush stalker no longer erupts on the player** (`game/scripts/creatures/ambush_stalker.gd`). Root cause: it homed to the player's *exact* XZ underground and surfaced inside the camera — invisible, unshootable, 3-hit kill. Fix: holds a `STANDOFF` (5 m) while lurking, snaps to a visible `EMERGE_STANDOFF` (9 m) surface point before erupting, keeps `MELEE_RANGE` 5 m so it stays shootable, `REGROUP` 3 s between strikes, `DAMAGE` 34→22. It's invisible underground so the pre-eruption XZ snap reads as an ambush, not a teleport.
@@ -14,11 +15,13 @@ Branch `phase1-creatures-visuals`, HEAD **`85b954e`**, pushed & remote-verified.
 - **Mixamo pipeline set up:** installed **Blender 5.2** (`C:\Program Files\Blender Foundation\Blender 5.2\blender.exe`) and **uv** (both via winget). `tools/glb_to_fbx.py` converts the character; produced `C:\Users\Jamon\Desktop\DOME Ozark Extinction\character.fbx` (50 MB) ready for Mixamo upload.
 
 **LEFT / next:**
-- **Mixamo (Jamon's hands):** upload `character.fbx`, apply rifle Idle/Walk/Run (In Place), download FBX (30fps, keyframe none; With Skin on first, Without Skin on rest) into `game/assets/anims/`. Then next session wires them to the AnimationPlayer and **deletes the procedural walk**.
+- **Mixamo — IN PROGRESS, Jamon is uploading manually.** Two FBX files sit on his Desktop: `character.fbx` (48 MB, textures embedded — THE one to upload, keeps the look) and `character_rig.fbx` (1.9 MB, textures stripped, grey — a fallback only). Auto-rig needs marker placement (wrists/elbows/knees/groin). Jamon will drop **rifle Idle/Walk/Run** clips (FBX Binary, 30fps, keyframe none, In Place) into **`game/assets/anims/`**. When they appear: wire to the AnimationPlayer (suffix-matcher already exists) and **delete the procedural walk** in `player_controller.gd`. Godot 4.7 imports Mixamo FBX natively — no conversion back.
+- Blender headless conversion scripts: `tools/glb_to_fbx.py` (embeds textures) and `/tmp/glb_to_fbx_slim.py` pattern (strips them). Re-runnable: `blender --background --python <script> -- in.glb out.fbx`.
+- **Could NOT drive Mixamo via Chrome MCP** — the claude-in-chrome extension wouldn't create a tab group ("No group with id"); needs the extension attached to an active tab. Fell back to handing Jamon the file.
 - **BlenderMCP:** addon extracted at `blender-mcp-extracted/blender-mcp-main/addon.py`; NOT yet registered in Claude config and won't load until an app restart. Install addon in Blender → enable → N-panel → Connect to Claude; register with `claude mcp add`; restart. Not on the critical path (headless Blender handles conversions).
 - Verify licenses of user-supplied GLBs (character, dragon/phoenix/pterodactyl) before commercial ship.
 
-**Scope not touched this session:** creature AI FSM, world gen, weapons, UI, shaders — all untouched. No master merge / production deploy.
+**Scope not touched this session:** creature AI FSM, world gen, weapons, UI, shaders — all untouched.
 
 ---
 ## TL;DR
