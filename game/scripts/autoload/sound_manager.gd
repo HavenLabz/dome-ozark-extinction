@@ -248,17 +248,15 @@ func _seamless(raw: PackedFloat32Array, len: int, xf: int) -> PackedFloat32Array
 
 
 func _synth_wind() -> PackedFloat32Array:
-	# Long buffer + non-periodic gusting so there's no audible repeat cadence.
+	# Steady band-limited air hiss — NO amplitude envelope. The old swelling gust
+	# is what read as rhythmic "waves" on every loop; a constant hiss can't pulse.
 	var len := int(RATE * 4.0)
-	var xf := int(RATE * 0.4)
+	var xf := int(RATE * 0.5)
 	var raw := _n(len + xf)
 	var lp := 0.0
-	var drift := 0.0
 	for i in len + xf:
-		lp = lerpf(lp, _rng.randf_range(-1.0, 1.0), 0.02)
-		drift = lerpf(drift, _rng.randf_range(-1.0, 1.0), 0.0015)   # slow random gusts, not a sine
-		var gust := 0.55 + 0.35 * (0.5 + 0.5 * drift)
-		raw[i] = lp * gust
+		lp = lerpf(lp, _rng.randf_range(-1.0, 1.0), 0.045)   # low-passed white = soft wind hiss
+		raw[i] = lp * 0.9
 	return _seamless(raw, len, xf)
 
 

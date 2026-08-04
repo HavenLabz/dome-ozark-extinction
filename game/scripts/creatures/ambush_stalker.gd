@@ -11,10 +11,13 @@ enum S { LURK, EMERGE, ATTACK, SUBMERGE }
 
 const LURK_DEPTH := 6.0        # how far below ground it hides
 const EMERGE_NOISE_RANGE := 34.0
-const EMERGE_CLOSE_RANGE := 9.0
-const MELEE_RANGE := 3.2
-const DAMAGE := 34.0
-const ATTACK_CD := 1.3
+const EMERGE_CLOSE_RANGE := 15.0   # erupt from a visible distance, never right on top
+const STANDOFF := 5.0              # never occupy the player's space (it can't be shot point-blank)
+const EMERGE_STANDOFF := 9.0       # erupts this far from the player, in full view
+const MELEE_RANGE := 5.0           # long reach; keeps it out of the camera so you can fight it
+const DAMAGE := 22.0               # lethal if ignored, survivable long enough to react
+const ATTACK_CD := 1.5
+const REGROUP := 3.0               # min time lurking before it can erupt again after a strike
 
 var _state: int = S.LURK
 var _t: float = 0.0
@@ -104,19 +107,22 @@ func _physics_process(delta: float) -> void:
 
 
 func _tick_lurk(delta: float) -> void:
-	# Creep, submerged, toward the player's ground position.
+	# Creep, submerged, toward the player — but hold a stand-off so it never ends
+	# up buried directly under them (that's what used to erupt into the camera).
 	var pp := _player.global_position
 	var here := global_position
 	var to := Vector3(pp.x - here.x, 0.0, pp.z - here.z)
 	var dist := to.length()
 	var speed := 7.0 if GameState.is_night else 5.0
-	if dist > 1.0:
-		var dir := to.normalized()
-		global_position += dir * speed * delta
+	if dist > STANDOFF:
+		global_position += to.normalized() * speed * delta
 	# Stay buried under the surface.
 	global_position.y = _ground_y(global_position) - LURK_DEPTH
 
-	# Trigger: player is loud within range, or simply very close.
+	# Regroup briefly after a strike before it can hunt again.
+	if _t < REGROUP:
+		return
+	# Trigger: player is loud within range, or simply close (but not on top).
 	var loud: bool = _player.has_method("is_making_noise") and _player.is_making_noise()
 	var noise_r := EMERGE_NOISE_RANGE * (1.3 if GameState.is_night else 1.0)
 	if (loud and dist < noise_r) or dist < EMERGE_CLOSE_RANGE:
@@ -161,6 +167,17 @@ func _enter(s: int) -> void:
 	if _model:
 		_model.visible = s == S.EMERGE or s == S.ATTACK
 	if s == S.EMERGE:
+		# Snap to a fair, visible surface point away from the player before erupting —
+		# it's invisible underground, so relocating the eruption reads as an ambush,
+		# never as spawning inside the camera.
+		var pp := _player.global_position
+		var dir := global_position - pp
+		dir.y = 0.0
+		dir = dir.normalized() if dir.length() > 0.1 else Vector3.FORWARD
+		var surf := pp + dir * EMERGE_STANDOFF
+		global_position.x = surf.x
+		global_position.z = surf.z
+		global_position.y = _ground_y(global_position) - 3.0
 		Sfx.play_at("roar", global_position + Vector3.UP, 0.5, 8.0)
 		_dirt_burst()
 
